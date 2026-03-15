@@ -2,10 +2,12 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useEffect } from 'react';
 import MainLayout from './layouts/MainLayout';
+import AdminLayout from './layouts/AdminLayout';
 import AuthGuard from './guards/AuthGuard';
+import AdminGuard from './guards/AdminGuard';
 import useAuthStore from './store/authStore';
 
-// Pages
+// Customer Pages
 import LandingPage from './pages/LandingPage';
 import ShopPage from './pages/ShopPage';
 import ProductDetailPage from './pages/ProductDetailPage';
@@ -19,17 +21,24 @@ import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import NotFoundPage from './pages/NotFound';
 
+// Admin Pages
+import AdminDashboard from './pages/admin/AdminDashboard';
+import AdminProducts from './pages/admin/AdminProducts';
+import AdminProductForm from './pages/admin/AdminProductForm';
+import AdminOrders from './pages/admin/AdminOrders';
+import AdminOrderDetail from './pages/admin/AdminOrderDetail';
+import AdminCoupons from './pages/admin/AdminCoupons';
+import AdminCouponForm from './pages/admin/AdminCouponForm';
+
 function App() {
   const initialize = useAuthStore((s) => s.initialize);
 
-  // Initialize auth on app load
   useEffect(() => {
     initialize();
   }, [initialize]);
 
   return (
     <Router>
-      {/* Toast Notifications — Per Design Doc §6.3 pattern 7 */}
       <Toaster
         position="top-center"
         toastOptions={{
@@ -42,17 +51,13 @@ function App() {
             borderRadius: '2px',
             padding: '14px 20px',
           },
-          success: {
-            iconTheme: { primary: '#C8944A', secondary: '#FEFCF8' },
-          },
-          error: {
-            iconTheme: { primary: '#A35D5D', secondary: '#FEFCF8' },
-          },
+          success: { iconTheme: { primary: '#C8944A', secondary: '#FEFCF8' } },
+          error: { iconTheme: { primary: '#A35D5D', secondary: '#FEFCF8' } },
         }}
       />
 
       <Routes>
-        {/* Public routes with main layout */}
+        {/* Customer routes */}
         <Route element={<MainLayout />}>
           <Route path="/" element={<LandingPage />} />
           <Route path="/products" element={<ShopPage />} />
@@ -60,19 +65,27 @@ function App() {
           <Route path="/cart" element={<CartPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/contact" element={<ContactPage />} />
-
-          {/* Authenticated customer routes */}
           <Route path="/checkout" element={<AuthGuard><CheckoutPage /></AuthGuard>} />
           <Route path="/orders" element={<AuthGuard><OrdersPage /></AuthGuard>} />
           <Route path="/orders/:orderId" element={<AuthGuard><OrderDetailPage /></AuthGuard>} />
           <Route path="/account" element={<AuthGuard><AccountPage /></AuthGuard>} />
-
-          {/* Catch-all */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
 
-        {/* Login (no main layout — uses split layout) */}
+        {/* Login — separate layout */}
         <Route path="/login" element={<LoginPage />} />
+
+        {/* Admin routes — separate layout */}
+        <Route path="/admin" element={<AdminGuard><AdminLayout /></AdminGuard>}>
+          <Route index element={<AdminDashboard />} />
+          <Route path="products" element={<AdminProducts />} />
+          <Route path="products/new" element={<AdminProductForm />} />
+          <Route path="products/:productId/edit" element={<AdminProductForm />} />
+          <Route path="orders" element={<AdminOrders />} />
+          <Route path="orders/:orderId" element={<AdminOrderDetail />} />
+          <Route path="coupons" element={<AdminCoupons />} />
+          <Route path="coupons/new" element={<AdminCouponForm />} />
+        </Route>
       </Routes>
     </Router>
   );

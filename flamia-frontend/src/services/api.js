@@ -88,3 +88,57 @@ export const uploadFile = (type, id, file) => {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
 };
+
+export const uploadProductImage = (productId, file) =>
+  uploadFile('product', productId, file);
+
+// ── Admin: Dashboard ─────────────────────────
+
+export const getAdminDashboard = () =>
+  api.get('/admin/dashboard');
+
+export const getAdminRecentOrders = (params = {}) =>
+  api.get('/admin/orders/recent', { params });
+
+// ── Admin: Products ──────────────────────────
+
+export const getAdminProducts = (params = {}) =>
+  api.get('/admin/products', { params });
+
+export const getProductById = (id) =>
+  api.get(`/admin/products/${id}`);
+
+export const createProduct = (data) =>
+  api.post('/admin/products', data);
+
+export const updateProduct = (id, data) =>
+  api.put(`/admin/products/${id}`, data);
+
+export const deleteProduct = (id) =>
+  api.delete(`/admin/products/${id}`);
+
+// ── Admin: Orders ────────────────────────────
+
+export const getAdminOrders = (params = {}) =>
+  api.get('/admin/orders', { params });
+
+export const getAdminOrderDetail = (id) =>
+  api.get(`/admin/orders/${id}`);
+
+export const updateOrderStatus = (id, data) =>
+  api.put(`/admin/orders/${id}/status`, data);
+
+export const updateOrderTracking = (id, data) =>
+  api.put(`/admin/orders/${id}/tracking`, data);
+
+// ── Admin: Coupons ───────────────────────────
+
+export const getAdminCoupons = (params = {}) =>
+  api.get('/admin/coupons', { params });
+
+export const createCoupon = (data) =>
+  api.post('/admin/coupons', data);
+
+export const deleteCoupon = (id) =>
+  api.delete(`/admin/coupons/${id}`);
+
