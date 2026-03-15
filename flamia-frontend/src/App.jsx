@@ -11,8 +11,12 @@ import ShopPage from './pages/ShopPage';
 import ProductDetailPage from './pages/ProductDetailPage';
 import CartPage from './pages/CartPage';
 import LoginPage from './pages/LoginPage';
+import CheckoutPage from './pages/CheckoutPage';
 import OrdersPage from './pages/OrdersPage';
+import OrderDetailPage from './pages/OrderDetailPage';
 import AccountPage from './pages/AccountPage';
+import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
 import NotFoundPage from './pages/NotFound';
 
 function App() {
@@ -54,9 +58,13 @@ function App() {
           <Route path="/products" element={<ShopPage />} />
           <Route path="/products/:slug" element={<ProductDetailPage />} />
           <Route path="/cart" element={<CartPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/contact" element={<ContactPage />} />
 
           {/* Authenticated customer routes */}
+          <Route path="/checkout" element={<AuthGuard><CheckoutPage /></AuthGuard>} />
           <Route path="/orders" element={<AuthGuard><OrdersPage /></AuthGuard>} />
+          <Route path="/orders/:orderId" element={<AuthGuard><OrderDetailPage /></AuthGuard>} />
           <Route path="/account" element={<AuthGuard><AccountPage /></AuthGuard>} />
 
           {/* Catch-all */}
