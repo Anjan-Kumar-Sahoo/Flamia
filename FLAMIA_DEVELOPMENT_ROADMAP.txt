@@ -1,0 +1,576 @@
+================================================================================
+FLAMIA — DEVELOPMENT ROADMAP
+Phased Implementation Plan
+================================================================================
+
+Document Version : 1.0
+Last Updated     : 2026-03-15
+Status           : Production-Ready Specification
+Classification   : Internal Engineering Document
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Roadmap Overview
+2. Phase 1 — Database Setup
+3. Phase 2 — Backend Core
+4. Phase 3 — Security
+5. Phase 4 — Product Module
+6. Phase 5 — Order Module
+7. Phase 6 — Payment Integration
+8. Phase 7 — Review System
+9. Phase 8 — Frontend Static UI
+10. Phase 9 — API Integration
+11. Phase 10 — Deployment
+12. Cross-Phase Activities
+13. Risk Mitigation
+
+================================================================================
+1. ROADMAP OVERVIEW
+================================================================================
+
+  Phase  Name                  Duration    Dependencies     Priority
+  ─────  ────────────────────  ──────────  ───────────────  ────────
+  1      Database Setup        3 days      None             Critical
+  2      Backend Core          5 days      Phase 1          Critical
+  3      Security              4 days      Phase 2          Critical
+  4      Product Module        5 days      Phase 3          Critical
+  5      Order Module          6 days      Phase 4          Critical
+  6      Payment Integration   5 days      Phase 5          Critical
+  7      Review System         4 days      Phase 5          High
+  8      Frontend Static UI    10 days     Phase 1 (schema) Critical
+  9      API Integration       8 days      Phases 4-7, 8    Critical
+  10     Deployment            4 days      Phases 1-9       Critical
+
+  Total Estimated Duration: 54 working days (approximately 11 weeks)
+
+  Parallel Execution Opportunities:
+    - Phase 8 (Frontend Static UI) can begin in parallel with Phases 4-7
+      since it starts with static/mock data.
+    - Phase 7 (Reviews) can run in parallel with Phase 6 (Payments)
+      since they share only the Order dependency.
+
+  With parallelization, estimated timeline reduces to approximately
+  8-9 weeks with two developers (one backend, one frontend).
+
+================================================================================
+2. PHASE 1 — DATABASE SETUP (3 DAYS)
+================================================================================
+
+  Objective:
+    Set up Supabase project, configure PostgreSQL database, create all
+    tables, indexes, and storage buckets.
+
+  Prerequisites:
+    - Supabase account created
+    - Supabase project provisioned
+
+  Deliverables:
+    ☐ Supabase project configured with proper region (Mumbai/Singapore)
+    ☐ All 12 database tables created with proper constraints
+    ☐ All indexes created (including pg_trgm extension)
+    ☐ All foreign keys and cascade rules configured
+    ☐ Storage buckets created (flamia-products, flamia-reviews, flamia-payments)
+    ☐ Storage bucket RLS policies configured
+    ☐ Initial category seed data inserted
+    ☐ Database connection tested from local development environment
+    ☐ SQL migration scripts saved in repository
+
+  Day-by-Day Breakdown:
+    Day 1: Supabase setup, core tables (users, categories, products,
+            product_images)
+    Day 2: Transaction tables (orders, order_items, payments, addresses,
+            coupons, coupon_usages)
+    Day 3: Review tables, indexes, storage buckets, seed data, testing
+
+  Verification:
+    - All tables visible in Supabase Table Editor
+    - Constraints verified (try inserting invalid data)
+    - Storage buckets accessible via Supabase dashboard
+    - Connection string works from local Spring Boot application
+
+================================================================================
+3. PHASE 2 — BACKEND CORE (5 DAYS)
+================================================================================
+
+  Objective:
+    Initialize Spring Boot project, configure database connection,
+    create entity classes, repository interfaces, base configuration,
+    and global exception handling.
+
+  Prerequisites:
+    - Phase 1 complete (database ready)
+
+  Deliverables:
+    ☐ Spring Boot 3 project initialized with required dependencies
+    ☐ application.yml configured for dev and prod profiles
+    ☐ All 12 JPA entity classes created with proper annotations
+    ☐ All repository interfaces created
+    ☐ DTO classes for requests and responses
+    ☐ Enum classes (UserRole, OrderStatus, PaymentStatus, etc.)
+    ☐ GlobalExceptionHandler with all custom exceptions
+    ☐ ApiResponse wrapper class
+    ☐ Mapper classes for entity-DTO conversion
+    ☐ Utility classes (SlugGenerator, OrderIdGenerator, PriceCalculator)
+    ☐ Email service with Thymeleaf templates (6 templates)
+    ☐ Supabase Storage service (REST client)
+    ☐ Application starts and connects to database successfully
+    ☐ Entity-table mapping validated (ddl-auto=validate passes)
+
+  Day-by-Day Breakdown:
+    Day 1: Project init, dependencies, configuration, entity classes (users,
+            categories, products, product_images)
+    Day 2: Entity classes (orders, order_items, payments, addresses,
+            coupons, coupon_usages, reviews, review_media)
+    Day 3: Repository interfaces, DTO classes, enum classes, mappers
+    Day 4: GlobalExceptionHandler, utility classes, ApiResponse
+    Day 5: Email service + templates, Storage service, integration testing
+
+  Verification:
+    - Application starts without errors
+    - Hibernate validates all entity mappings
+    - Repository method queries execute correctly
+    - Email service sends test email
+
+================================================================================
+4. PHASE 3 — SECURITY (4 DAYS)
+================================================================================
+
+  Objective:
+    Implement Supabase JWT validation, Spring Security configuration,
+    role-based access control, and CORS configuration.
+
+  Prerequisites:
+    - Phase 2 complete (entities and repositories ready)
+    - Supabase JWT secret available
+
+  Deliverables:
+    ☐ JwtTokenValidator — validates Supabase JWT (signature, expiry, claims)
+    ☐ JwtAuthenticationFilter — extracts and validates JWT from requests
+    ☐ UserPrincipal class for authenticated context
+    ☐ SecurityConfig — Spring Security filter chain configuration
+    ☐ CorsConfig — CORS rules for frontend origin
+    ☐ Public endpoint whitelist configured
+    ☐ ADMIN role enforcement on /api/admin/** paths
+    ☐ AuthController — POST /api/auth/sync endpoint
+    ☐ AuthService — user sync logic (create/update on first login)
+    ☐ Security headers configured
+    ☐ All endpoints tested with valid/invalid/missing JWT
+    ☐ Role-based access verified (CUSTOMER vs ADMIN)
+
+  Day-by-Day Breakdown:
+    Day 1: JwtTokenValidator, JwtAuthenticationFilter, UserPrincipal
+    Day 2: SecurityConfig, CorsConfig, public endpoint whitelist
+    Day 3: AuthController, AuthService, user sync flow
+    Day 4: Integration testing — JWT validation, role checks, CORS
+
+  Verification:
+    - Public endpoints accessible without JWT
+    - Protected endpoints return 401 without JWT
+    - Valid JWT with CUSTOMER role can access customer endpoints
+    - Valid JWT with CUSTOMER role gets 403 on admin endpoints
+    - Valid JWT with ADMIN role can access admin endpoints
+    - CORS headers present on responses
+    - Invalid JWT returns 401
+
+================================================================================
+5. PHASE 4 — PRODUCT MODULE (5 DAYS)
+================================================================================
+
+  Objective:
+    Implement complete product and category management with admin CRUD
+    and public browsing APIs.
+
+  Prerequisites:
+    - Phase 3 complete (security layer ready)
+
+  Deliverables:
+    ☐ CategoryController — GET /api/categories
+    ☐ CategoryService — list with ordering
+    ☐ ProductController — GET /api/products, GET /api/products/:slug
+    ☐ ProductService — list with filtering, sorting, pagination, search
+    ☐ AdminCategoryController — CRUD endpoints
+    ☐ AdminProductController — CRUD endpoints
+    ☐ Product image management (link Supabase Storage URLs)
+    ☐ Product search using pg_trgm trigram matching
+    ☐ Product filtering by category, price range, availability
+    ☐ Product sorting by name, price, newest, rating
+    ☐ Pagination with PagedResponse
+
+  Day-by-Day Breakdown:
+    Day 1: Category service, controller, admin category CRUD
+    Day 2: Product service — listing with filters, sorting, pagination
+    Day 3: Product detail endpoint, slug generation, image management
+    Day 4: Admin product CRUD (create, update, soft delete)
+    Day 5: Product search, integration testing
+
+  Verification:
+    - Product list API returns paginated results
+    - Filters narrow results correctly
+    - Search finds products by partial name match
+    - Admin can create product with images
+    - Admin can update product details
+    - Soft-deleted products hidden from public API
+    - Product slugs are unique and URL-friendly
+
+================================================================================
+6. PHASE 5 — ORDER MODULE (6 DAYS)
+================================================================================
+
+  Objective:
+    Implement complete order lifecycle including address management,
+    coupon validation, order creation, and admin order management.
+
+  Prerequisites:
+    - Phase 4 complete (products available to order)
+
+  Deliverables:
+    ☐ AddressController — CRUD endpoints for customer addresses
+    ☐ AddressService — create, update, delete, set default
+    ☐ CouponController — POST /api/coupons/validate
+    ☐ CouponService — coupon validation logic
+    ☐ AdminCouponController — CRUD endpoints
+    ☐ OrderController — POST /api/orders, GET /api/orders,
+                         GET /api/orders/:orderId
+    ☐ OrderService — order creation with stock management,
+                     coupon application, address snapshot
+    ☐ OrderIdGenerator — FLM-YYYYMMDD-XXXX format
+    ☐ AdminOrderController — list, detail, update status, add tracking
+    ☐ OrderCleanupScheduler — auto-cancel unpaid orders after 24h
+    ☐ Email notifications triggered on order status changes
+    ☐ Stock decrement on order creation
+    ☐ Stock restoration on order cancellation
+
+  Day-by-Day Breakdown:
+    Day 1: Address service and controller (CRUD + default logic)
+    Day 2: Coupon service, validation, admin coupon CRUD
+    Day 3: Order creation — validation, stock, coupon, address snapshot
+    Day 4: Order listing, detail, status transitions
+    Day 5: Admin order management — status updates, tracking ID
+    Day 6: Auto-cancel scheduler, email integration, testing
+
+  Verification:
+    - Address CRUD works with max 5 limit
+    - Coupon validation covers all edge cases
+    - Order creation validates stock, applies coupon, snapshots address
+    - Stock decremented on order creation
+    - Order status transitions follow state machine
+    - Auto-cancel cancels unpaid orders after 24h
+    - Email sent on order placement and status changes
+    - Admin can add tracking ID to SHIPPED orders
+
+================================================================================
+7. PHASE 6 — PAYMENT INTEGRATION (5 DAYS)
+================================================================================
+
+  Objective:
+    Implement Razorpay payment integration and manual UPI payment flow.
+
+  Prerequisites:
+    - Phase 5 complete (orders ready for payment)
+    - Razorpay account created with test API keys
+
+  Deliverables:
+    ☐ RazorpayConfig — Razorpay client bean configuration
+    ☐ RazorpayService — create Razorpay order, verify signature
+    ☐ PaymentController — Razorpay create order, verify payment
+    ☐ PaymentController — UPI submit (screenshot URL + UTR)
+    ☐ PaymentService — payment creation, status management
+    ☐ AdminPaymentController — UPI payment verification (approve/reject)
+    ☐ Payment-to-order status synchronization
+    ☐ Razorpay test mode end-to-end flow verified
+    ☐ UPI manual flow end-to-end verified
+    ☐ Email notifications on payment confirmation/rejection
+
+  Day-by-Day Breakdown:
+    Day 1: Razorpay SDK setup, config, RazorpayService
+    Day 2: Razorpay payment flow — create order, verify signature
+    Day 3: UPI manual payment — submit endpoint, admin verify endpoint
+    Day 4: Payment-order status sync, email notifications
+    Day 5: End-to-end testing (Razorpay test mode + UPI flow)
+
+  Verification:
+    - Razorpay order created with correct amount in paise
+    - Razorpay signature verification works (valid and invalid)
+    - Successful payment updates order to CONFIRMED
+    - Failed payment updates payment to FAILED
+    - UPI submission stores screenshot URL and UTR
+    - Admin can approve UPI → order becomes CONFIRMED
+    - Admin can reject UPI → payment becomes FAILED
+    - Emails sent on payment events
+
+================================================================================
+8. PHASE 7 — REVIEW SYSTEM (4 DAYS)
+================================================================================
+
+  Objective:
+    Implement purchase-verified review system with text, image,
+    and audio support.
+
+  Prerequisites:
+    - Phase 5 complete (need orders to verify purchases)
+
+  Deliverables:
+    ☐ ReviewController — GET /api/reviews/product/:productId (public)
+    ☐ ReviewController — POST /api/reviews (create, customer only)
+    ☐ ReviewController — PUT /api/reviews/:id (update, owner only)
+    ☐ ReviewController — DELETE /api/reviews/:id (owner or admin)
+    ☐ ReviewService — purchase verification logic
+    ☐ ReviewService — one-review-per-product enforcement
+    ☐ ReviewService — media validation (URL, size, type)
+    ☐ AdminReviewController — list all, delete any review
+    ☐ Average rating recalculation on review create/update/delete
+    ☐ Review media cleanup (Supabase Storage deletion on review delete)
+
+  Day-by-Day Breakdown:
+    Day 1: Review entity, service, purchase verification
+    Day 2: Create review — with media validation, one-per-product check
+    Day 3: Update/delete review, admin delete, media cleanup
+    Day 4: Average rating recalculation, pagination, integration testing
+
+  Verification:
+    - Cannot create review without delivered order of that product
+    - Cannot create second review for same product
+    - Review with images and audio saves correctly
+    - Files > 3MB rejected
+    - Video files rejected
+    - Owner can edit/delete own review
+    - Admin can delete any review but cannot edit
+    - Average rating updates correctly after all CRUD operations
+    - Deleted review's media files removed from Supabase Storage
+
+================================================================================
+9. PHASE 8 — FRONTEND STATIC UI (10 DAYS)
+================================================================================
+
+  Objective:
+    Build the complete React frontend with static/mock data.
+    All pages, components, and animations implemented.
+    No API integration yet — uses hardcoded data for development.
+
+  Prerequisites:
+    - Phase 1 database schema (for data shape understanding)
+    - FLAMIA_UI_DESIGN_SYSTEM.txt (for design implementation)
+
+  Deliverables:
+    ☐ Vite project initialized with React, Tailwind, Framer Motion
+    ☐ Tailwind configuration with Flamia design tokens
+    ☐ Font setup (Cormorant Garamond, Inter, JetBrains Mono)
+    ☐ All UI primitive components (buttons, inputs, modals, etc.)
+    ☐ Layout components (Navbar, Footer, MainLayout, PageTransition)
+    ☐ Landing page with all 7 story sections + animations
+    ☐ Product list page with filters, sorting, pagination
+    ☐ Product detail page with image gallery and reviews section
+    ☐ Cart page and cart drawer
+    ☐ Login page with phone input and OTP stages
+    ☐ Checkout page (address, summary, payment steps)
+    ☐ Order list and order detail pages
+    ☐ Account page with address book
+    ☐ Admin dashboard
+    ☐ Admin product management (list + form)
+    ☐ Admin order management
+    ☐ Admin coupon management
+    ☐ Admin review moderation
+    ☐ Static/policy pages (about, contact, privacy, etc.)
+    ☐ 404 page
+    ☐ All scroll animations working
+    ☐ All page transitions working
+    ☐ Responsive design verified on mobile + desktop
+    ☐ Zustand cart store implemented (local-only)
+
+  Day-by-Day Breakdown:
+    Day 1:  Project init, Tailwind config, fonts, global styles
+    Day 2:  UI primitives (Button, Input, Modal, Badge, etc.)
+    Day 3:  Layout (Navbar, Footer, responsive menu) + routing setup
+    Day 4:  Landing page — Hero, Brand Promise, Featured Products
+    Day 5:  Landing page — Parallax, USPs, Testimonials, Newsletter
+    Day 6:  Product list page, product detail page (with mock data)
+    Day 7:  Cart, checkout flow, login page
+    Day 8:  Orders, account pages, static/policy pages
+    Day 9:  Admin pages (dashboard, products, orders)
+    Day 10: Admin pages (coupons, reviews), 404, final polish
+
+  Verification:
+    - All pages accessible via routing
+    - Landing page animations smooth on mobile and desktop
+    - Product cards render correctly with mock data
+    - Cart operations work (add, remove, update quantity)
+    - Checkout flow navigable (address → summary → payment)
+    - Admin pages display mock data in tables
+    - Responsive: mobile, tablet, desktop breakpoints verified
+    - Page transitions smooth between routes
+
+================================================================================
+10. PHASE 9 — API INTEGRATION (8 DAYS)
+================================================================================
+
+  Objective:
+    Connect all frontend pages to the backend REST API. Replace mock
+    data with real API calls. Implement Supabase Auth, Razorpay
+    checkout, and file uploads.
+
+  Prerequisites:
+    - Phases 4-7 complete (all backend APIs ready)
+    - Phase 8 complete (all frontend UI ready)
+
+  Deliverables:
+    ☐ Axios instance with JWT interceptor configured
+    ☐ Supabase client initialized for OTP auth
+    ☐ Auth flow — OTP login, session management, auto-refresh
+    ☐ Auth guards (AuthGuard, AdminGuard) connected to auth store
+    ☐ Product listing, filtering, sorting, and search via API
+    ☐ Product detail from API
+    ☐ Cart checkout → order creation via API
+    ☐ Address CRUD via API
+    ☐ Coupon validation via API
+    ☐ Razorpay Checkout.js integration
+    ☐ Manual UPI payment flow with Supabase Storage upload
+    ☐ Order listing and detail from API
+    ☐ Review listing from API
+    ☐ Review submission with media upload to Supabase Storage
+    ☐ Admin product CRUD via API
+    ☐ Admin order management via API
+    ☐ Admin coupon management via API
+    ☐ Admin review moderation via API
+    ☐ Admin UPI payment verification via API
+    ☐ Error handling for all API calls
+    ☐ Loading states (skeletons) for all data-driven pages
+    ☐ Empty states for all list pages
+    ☐ Toast notifications for all user actions
+
+  Day-by-Day Breakdown:
+    Day 1:  Axios setup, Supabase auth, auth store, login flow
+    Day 2:  Auth guards, session persistence, token refresh
+    Day 3:  Products API integration (listing, detail, search)
+    Day 4:  Cart → checkout → order creation, address, coupons
+    Day 5:  Razorpay checkout integration
+    Day 6:  UPI manual flow, file uploads, order listing/detail
+    Day 7:  Reviews (listing, submission with media upload)
+    Day 8:  Admin integrations (products, orders, coupons, reviews, UPI)
+
+  Verification:
+    - OTP login works end-to-end with real phone number
+    - Products load from API with pagination
+    - Search and filters work correctly
+    - Order can be placed with Razorpay payment (test mode)
+    - Order can be placed with UPI manual flow
+    - Reviews display on product pages
+    - New review with images/audio submits successfully
+    - Admin can manage all entities
+    - Admin can verify UPI payments
+    - Error states display correctly on API failures
+    - Loading states show skeletons during data fetch
+
+================================================================================
+11. PHASE 10 — DEPLOYMENT (4 DAYS)
+================================================================================
+
+  Objective:
+    Deploy backend to Render, frontend to Vercel, configure environment
+    variables, verify production, and perform final testing.
+
+  Prerequisites:
+    - All previous phases complete
+    - Render and Vercel accounts created
+    - Production Razorpay keys available
+    - Domain name configured (if applicable)
+
+  Deliverables:
+    ☐ Backend deployed on Render free tier (Web Service)
+    ☐ Frontend deployed on Vercel (Static Site)
+    ☐ All environment variables configured on Render
+    ☐ All environment variables configured on Vercel
+    ☐ CORS updated to production frontend URL
+    ☐ Supabase database accessible from Render
+    ☐ Razorpay switched to production keys
+    ☐ SMTP configured for production email sending
+    ☐ SSL/HTTPS verified on both services
+    ☐ Production smoke testing complete
+    ☐ Admin user created in production database
+    ☐ Initial product catalog uploaded via admin panel
+    ☐ Security audit performed (JWT, CORS, permissions)
+    ☐ Performance benchmarking (page load, API response times)
+    ☐ Monitoring and error tracking configured
+
+  Day-by-Day Breakdown:
+    Day 1:  Render setup — deploy backend, configure env vars, test
+    Day 2:  Vercel setup — deploy frontend, configure env vars, test
+    Day 3:  Production end-to-end testing, admin setup, product upload
+    Day 4:  Security audit, performance testing, monitoring, documentation
+
+  Verification:
+    - Backend API accessible at {render-url}/api/products
+    - Frontend loads at Vercel URL
+    - OTP login works with production Supabase
+    - Razorpay payment works with production keys
+    - All pages load correctly
+    - CORS works correctly (no cross-origin errors)
+    - Emails delivered in production
+    - Admin panel fully functional
+    - No console errors on any page
+    - Mobile experience verified on real device
+
+================================================================================
+12. CROSS-PHASE ACTIVITIES
+================================================================================
+
+  These activities run continuously throughout all phases:
+
+  Code Quality:
+    - Consistent code style (Checkstyle for Java, ESLint + Prettier for JS)
+    - Meaningful variable and function names
+    - JSDoc/JavaDoc comments on public APIs
+    - Git commit messages follow conventional commits
+
+  Testing:
+    - Unit tests for service layer business logic (JUnit 5)
+    - API integration tests for controller endpoints (Spring Boot Test)
+    - Frontend component testing (React Testing Library) for critical flows
+    - Manual testing after each feature completion
+
+  Documentation:
+    - API documentation kept in sync with FLAMIA_API_SPECIFICATION.txt
+    - README files updated in both repositories
+    - Environment variable documentation maintained
+
+  Version Control:
+    - Feature branches (feature/product-module, feature/landing-page)
+    - Pull requests for code review (if team of 2+)
+    - Main branch always deployable
+
+================================================================================
+13. RISK MITIGATION
+================================================================================
+
+  Risk                              Mitigation
+  ──────────────────────────────── ────────────────────────────────────────
+  Render free tier cold starts     Document expected behavior for users.
+  (30-second spin-up delay)        Show loading state on frontend.
+                                   Consider keep-alive ping from external
+                                   service (e.g., cron-job.org).
+
+  Supabase free tier limits        Monitor row counts and storage usage.
+  (500MB database, 1GB storage)    Optimize images before upload.
+                                   Clean up unused media files.
+
+  Razorpay integration issues      Start with Razorpay test mode.
+                                   Manually test all payment scenarios.
+                                   UPI fallback provides redundancy.
+
+  SMS OTP delivery failures        Display retry option with clear
+                                   messaging. Log failures for debugging.
+                                   Consider fallback OTP channel (WhatsApp)
+                                   in future iteration.
+
+  Large image uploads on slow      Client-side compression before upload.
+  mobile connections               Progress indicator during upload.
+                                   Max 3MB limit already constrains size.
+
+  Scope creep during development   Stick to documented features only.
+                                   Defer enhancements to post-launch phase.
+                                   Track all change requests separately.
+
+================================================================================
+END OF DOCUMENT — FLAMIA_DEVELOPMENT_ROADMAP.txt
+================================================================================

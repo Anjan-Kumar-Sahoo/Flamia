@@ -1,0 +1,478 @@
+================================================================================
+FLAMIA — PROJECT OVERVIEW
+Luxury Scented Candle E-Commerce Platform
+================================================================================
+
+Document Version : 1.0
+Last Updated     : 2026-03-15
+Status           : Production-Ready Specification
+Classification   : Internal Engineering Document
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. System Description
+2. Business Goals
+3. User Roles & Personas
+4. Feature List
+5. Architecture Overview
+6. Technology Stack Summary
+7. Repository Structure
+8. External Service Dependencies
+9. Non-Functional Requirements
+10. Glossary
+
+================================================================================
+1. SYSTEM DESCRIPTION
+================================================================================
+
+Flamia is a direct-to-consumer (D2C) luxury scented candle e-commerce platform
+designed to deliver a cinematic, immersive shopping experience. The platform
+serves the Indian market with phone-based OTP authentication, Razorpay payment
+integration, and a manual UPI fallback mechanism.
+
+The system is built as two separate applications:
+  - A Spring Boot 3 backend providing REST APIs, security, and business logic
+  - A React (Vite) frontend delivering a luxury animated user interface
+
+The platform targets premium customers who value aesthetic presentation,
+storytelling, and curated product experiences. Every interaction — from landing
+page scroll animations to product detail transitions — is designed to feel
+cinematic and intentional.
+
+Key Differentiators:
+  - Cinematic scroll-driven storytelling on the landing page
+  - Phone OTP-only authentication (no passwords)
+  - Rich media reviews (text, images, audio — no video)
+  - Manual UPI payment fallback with screenshot + UTR verification
+  - Admin-managed shipping via Shiprocket with manual tracking ID entry
+
+================================================================================
+2. BUSINESS GOALS
+================================================================================
+
+2.1 PRIMARY GOALS
+
+  BG-01  Launch a D2C luxury candle brand with an online-first sales channel.
+  BG-02  Deliver a premium brand experience through cinematic web design.
+  BG-03  Enable frictionless purchasing for Indian customers via phone OTP
+         and Razorpay/UPI payment methods.
+  BG-04  Build trust through verified purchase reviews with rich media.
+  BG-05  Minimize operational costs by deploying on free-tier infrastructure
+         (Render, Vercel, Supabase).
+
+2.2 SECONDARY GOALS
+
+  BG-06  Maintain a coupon and discount system to drive repeat purchases.
+  BG-07  Enable admin to manage the complete product catalog, orders, and
+         reviews without direct database access.
+  BG-08  Collect customer data (addresses, order history) for future
+         marketing initiatives.
+  BG-09  Support future scalability to a microservices architecture if
+         business growth demands it.
+
+2.3 SUCCESS METRICS
+
+  Metric                          Target
+  ───────────────────────────────  ──────────────────────
+  Page load time (LCP)            < 2.5 seconds
+  Checkout completion rate        > 60%
+  OTP delivery success rate       > 95%
+  Payment success rate            > 90%
+  Average session duration        > 3 minutes
+  Mobile traffic share            > 70%
+
+================================================================================
+3. USER ROLES & PERSONAS
+================================================================================
+
+3.1 GUEST (Unauthenticated User)
+
+  Permissions:
+    - Browse landing page
+    - View product catalog
+    - View product detail pages
+    - View published reviews
+    - Search and filter products
+    - View "About Us" and policy pages
+
+  Restrictions:
+    - Cannot add items to a persistent cart
+    - Cannot place orders
+    - Cannot submit reviews
+    - Cannot access account pages
+
+3.2 CUSTOMER (Authenticated User)
+
+  Authentication Method: Supabase Phone OTP (Indian mobile numbers, +91)
+
+  Permissions:
+    - All guest permissions
+    - Add items to cart (persisted via Zustand + localStorage)
+    - Place orders
+    - Pay via Razorpay or manual UPI
+    - View order history and order status
+    - Submit reviews for purchased products (text + images + audio)
+    - Edit/delete own reviews
+    - Manage delivery addresses
+    - View and apply coupon codes
+    - Receive email notifications (order confirmation, shipping updates)
+
+  Restrictions:
+    - Cannot access admin panel
+    - Cannot review products they have not purchased
+    - Cannot upload video reviews
+    - Cannot upload images > 3MB or audio > 3MB
+
+3.3 ADMIN (Administrative User)
+
+  Authentication Method: Supabase Phone OTP + admin role flag in database
+
+  Permissions:
+    - Full product CRUD (create, read, update, delete)
+    - Upload product images to Supabase Storage
+    - View all orders
+    - Update order status (CONFIRMED, SHIPPED, DELIVERED, CANCELLED)
+    - Add Shiprocket tracking IDs to orders
+    - Verify manual UPI payments (approve/reject based on screenshot + UTR)
+    - Create, update, deactivate coupon codes
+    - Delete customer reviews (cannot edit them)
+    - View platform analytics (order counts, revenue summaries)
+
+  Restrictions:
+    - Cannot edit customer reviews (only delete)
+    - Cannot modify customer account details directly
+
+================================================================================
+4. FEATURE LIST
+================================================================================
+
+4.1 STOREFRONT FEATURES
+
+  F-01   Cinematic landing page with scroll-driven animations
+  F-02   Product catalog with grid/list view and filtering
+  F-03   Product detail page with image gallery, description, and reviews
+  F-04   Product search by name, category, and scent family
+  F-05   Product filtering by price range, category, and availability
+  F-06   Product sorting by price, name, newest, and popularity
+  F-07   Responsive design optimized for mobile-first experience
+  F-08   Animated page transitions using Framer Motion
+
+4.2 AUTHENTICATION FEATURES
+
+  F-09   Phone OTP login via Supabase Auth (Indian +91 numbers only)
+  F-10   Session management via Supabase JWT tokens
+  F-11   Automatic token refresh
+  F-12   Logout functionality
+
+4.3 CART & CHECKOUT FEATURES
+
+  F-13   Add to cart / remove from cart / update quantity
+  F-14   Cart persistence via Zustand + localStorage
+  F-15   Cart summary with subtotal, discount, and total
+  F-16   Coupon code application at checkout
+  F-17   Delivery address selection/creation during checkout
+  F-18   Order summary review before payment
+
+4.4 PAYMENT FEATURES
+
+  F-19   Razorpay payment gateway integration (primary)
+  F-20   Manual UPI fallback:
+           - Display UPI ID for manual transfer
+           - Customer uploads payment screenshot
+           - Customer enters UTR number
+           - Admin verifies and approves/rejects payment
+  F-21   Payment status tracking (PENDING, PAID, FAILED, REFUNDED)
+  F-22   Order auto-cancellation for unpaid orders after 24 hours
+
+4.5 ORDER MANAGEMENT FEATURES
+
+  F-23   Order placement with automatic order ID generation
+  F-24   Order history for customers
+  F-25   Order detail view with item list, payment status, shipping status
+  F-26   Order status lifecycle:
+           PLACED → CONFIRMED → SHIPPED → DELIVERED
+           PLACED → CANCELLED
+  F-27   Admin order management dashboard
+  F-28   Admin can add Shiprocket tracking ID to shipped orders
+  F-29   Email notifications:
+           - Order placed confirmation
+           - Payment confirmed
+           - Order shipped (with tracking ID)
+           - Order delivered
+
+4.6 REVIEW FEATURES
+
+  F-30   Submit review for purchased products only
+  F-31   Review content: star rating (1-5), text, images (max 3MB each),
+         audio (max 3MB each)
+  F-32   No video reviews allowed
+  F-33   Edit own review
+  F-34   Delete own review
+  F-35   Admin can delete any review (cannot edit)
+  F-36   Review display on product detail page with pagination
+  F-37   Average rating calculation per product
+
+4.7 ADMIN FEATURES
+
+  F-38   Admin dashboard with order/revenue overview
+  F-39   Product management (CRUD + image upload)
+  F-40   Order management with status updates
+  F-41   Manual UPI payment verification
+  F-42   Coupon management (create, update, deactivate)
+  F-43   Review moderation (delete inappropriate reviews)
+  F-44   Category management
+
+4.8 NOTIFICATION FEATURES
+
+  F-45   Transactional email via Spring Boot email service
+  F-46   Email templates for order lifecycle events
+
+================================================================================
+5. ARCHITECTURE OVERVIEW
+================================================================================
+
+5.1 HIGH-LEVEL ARCHITECTURE DIAGRAM
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              CLIENT LAYER                                   │
+│                                                                             │
+│  ┌───────────────────────────────────────────────────────────────────────┐   │
+│  │                    React (Vite) Frontend                              │   │
+│  │                    Deployed on Vercel                                  │   │
+│  │                                                                       │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐  │   │
+│  │  │ Zustand   │  │ Framer   │  │ Axios    │  │ Supabase JS SDK     │  │   │
+│  │  │ (Cart)    │  │ Motion   │  │ (API)    │  │ (OTP Auth Only)     │  │   │
+│  │  └──────────┘  └──────────┘  └──────────┘  └──────────────────────┘  │   │
+│  └───────────────────────────────────────────────────────────────────────┘   │
+│                              │                          │                    │
+│                    REST API calls              Supabase Auth (OTP)           │
+│                    (Axios)                     (Phone verification)          │
+└──────────────────────────────┼──────────────────────────┼────────────────────┘
+                               │                          │
+                               ▼                          ▼
+┌──────────────────────────────────────────┐  ┌──────────────────────────────┐
+│         BACKEND LAYER                     │  │      SUPABASE SERVICES       │
+│                                           │  │                              │
+│  ┌─────────────────────────────────────┐  │  │  ┌────────────────────────┐  │
+│  │      Spring Boot 3 Backend          │  │  │  │   Supabase Auth        │  │
+│  │      Deployed on Render             │  │  │  │   (Phone OTP)          │  │
+│  │                                     │  │  │  └────────────────────────┘  │
+│  │  ┌───────────┐  ┌───────────────┐   │  │  │                              │
+│  │  │ Controller│  │ Spring        │   │  │  │  ┌────────────────────────┐  │
+│  │  │ Layer     │  │ Security      │   │  │  │  │   Supabase PostgreSQL  │  │
+│  │  │           │  │ (JWT Valid.)  │   │  │  │  │   (Database)           │  │
+│  │  └─────┬─────┘  └───────────────┘   │  │  │  └────────────────────────┘  │
+│  │        │                             │  │  │                              │
+│  │  ┌─────▼─────┐                       │  │  │  ┌────────────────────────┐  │
+│  │  │ Service   │                       │  │  │  │   Supabase Storage     │  │
+│  │  │ Layer     │                       │  │  │  │   (Images, Audio)      │  │
+│  │  └─────┬─────┘                       │  │  │  └────────────────────────┘  │
+│  │        │                             │  │  │                              │
+│  │  ┌─────▼─────┐                       │  │  └──────────────────────────────┘
+│  │  │ Repository│                       │  │
+│  │  │ Layer     │                       │  │
+│  │  │ (JPA)     │                       │  │
+│  │  └─────┬─────┘                       │  │
+│  │        │                             │  │
+│  └────────┼─────────────────────────────┘  │
+│           │                                │
+└───────────┼────────────────────────────────┘
+            │
+            ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                         EXTERNAL SERVICES                                    │
+│                                                                              │
+│  ┌──────────────────┐  ┌──────────────────┐  ┌────────────────────────────┐  │
+│  │   Razorpay        │  │   Shiprocket      │  │   SMTP Email Service      │  │
+│  │   (Payments)      │  │   (Shipping -     │  │   (Notifications)         │  │
+│  │                   │  │    External)       │  │                           │  │
+│  └──────────────────┘  └──────────────────┘  └────────────────────────────┘  │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+5.2 ARCHITECTURE STYLE: MONOLITHIC LAYERED
+
+The backend follows a strict layered architecture:
+
+  Layer 1 — Controller Layer (REST API Endpoints)
+    Handles HTTP request/response mapping, input validation,
+    and delegates to the service layer.
+
+  Layer 2 — Service Layer (Business Logic)
+    Contains all business rules, orchestration logic,
+    validation, and external service integration.
+
+  Layer 3 — Repository Layer (Data Access)
+    Spring Data JPA repositories for database operations.
+    No business logic in this layer.
+
+  Cross-Cutting Concerns:
+    - Security (Spring Security + Supabase JWT validation)
+    - Exception handling (Global exception handler)
+    - Logging (SLF4J + Logback)
+    - Configuration (application.yml, environment variables)
+
+5.3 DATA FLOW
+
+  Guest Browsing:
+    Browser → Vercel CDN → React App → Axios → Spring Boot API → PostgreSQL
+
+  Authentication:
+    Browser → Supabase JS SDK → Supabase Auth (OTP) → JWT issued
+    Browser → Axios + JWT Header → Spring Boot (JWT validation) → Authorized
+
+  Order Placement:
+    React → API (create order) → Spring Boot → PostgreSQL
+    React → Razorpay SDK → Razorpay → Webhook → Spring Boot → Update Order
+
+  Manual UPI Payment:
+    React → Upload screenshot to Supabase Storage → API (submit UTR + URL)
+    Admin → API (verify payment) → Update order status
+
+  Review Submission:
+    React → Upload media to Supabase Storage → API (submit review with URLs)
+    Spring Boot → Validate purchase history → Save review
+
+================================================================================
+6. TECHNOLOGY STACK SUMMARY
+================================================================================
+
+  Component          Technology               Version/Tier
+  ─────────────────  ───────────────────────  ──────────────────
+  Backend Runtime    Java                     17
+  Backend Framework  Spring Boot              3.x
+  Security           Spring Security          6.x
+  ORM                Spring Data JPA          3.x
+  Database           PostgreSQL (Supabase)    15.x
+  Auth Provider      Supabase Auth            Latest
+  Object Storage     Supabase Storage         Latest
+  Payment Gateway    Razorpay                 Latest
+  Frontend Runtime   Node.js                  18+ (build only)
+  Frontend Framework React                    18.x
+  Build Tool         Vite                     5.x
+  CSS Framework      Tailwind CSS             3.x
+  Animation          Framer Motion            10.x
+  HTTP Client        Axios                    1.x
+  State Management   Zustand                  4.x
+  Supabase Client    @supabase/supabase-js    2.x
+  Backend Hosting    Render                   Free Tier
+  Frontend Hosting   Vercel                   Free Tier
+  Email              Spring Boot Mail         3.x (SMTP)
+
+================================================================================
+7. REPOSITORY STRUCTURE
+================================================================================
+
+Two separate Git repositories:
+
+  Repository 1: flamia-backend
+    - Spring Boot 3 application
+    - Contains all backend source code, configurations, and migrations
+    - Deployed to Render
+
+  Repository 2: flamia-frontend
+    - React (Vite) application
+    - Contains all frontend source code, assets, and configurations
+    - Deployed to Vercel
+
+Rationale for separation:
+  - Independent deployment cycles
+  - Different hosting platforms (Render vs Vercel)
+  - Different CI/CD pipelines
+  - Clear ownership boundaries
+  - Frontend can be rebuilt/redeployed without backend changes
+
+================================================================================
+8. EXTERNAL SERVICE DEPENDENCIES
+================================================================================
+
+  Service         Purpose                    Integration Method
+  ──────────────  ─────────────────────────  ──────────────────────────────
+  Supabase Auth   Phone OTP authentication   Supabase JS SDK (frontend)
+                                             JWT validation (backend)
+  Supabase DB     PostgreSQL database        JDBC connection (backend)
+  Supabase        Image/audio storage        REST API (backend)
+  Storage                                    Supabase JS SDK (frontend
+                                             upload for reviews)
+  Razorpay        Payment processing         Razorpay Java SDK (backend)
+                                             Razorpay Checkout.js (frontend)
+  Shiprocket      Shipping & logistics       Manual (admin adds tracking)
+  SMTP Server     Email notifications        Spring Boot Mail (backend)
+
+================================================================================
+9. NON-FUNCTIONAL REQUIREMENTS
+================================================================================
+
+9.1 PERFORMANCE
+
+  NFR-01  Landing page initial load         < 3 seconds on 4G
+  NFR-02  API response time (95th pct)      < 500ms
+  NFR-03  Image optimization                WebP format, lazy loading
+  NFR-04  Frontend bundle size              < 500KB gzipped
+  NFR-05  Database query time (95th pct)    < 100ms
+
+9.2 SECURITY
+
+  NFR-06  All API endpoints require HTTPS
+  NFR-07  JWT tokens validated on every authenticated request
+  NFR-08  CORS restricted to frontend domain only
+  NFR-09  File upload size limits enforced server-side
+  NFR-10  SQL injection prevention via parameterized queries (JPA)
+  NFR-11  XSS prevention via React's default escaping + CSP headers
+  NFR-12  Rate limiting on OTP requests (Supabase built-in)
+
+9.3 RELIABILITY
+
+  NFR-13  Graceful degradation when Razorpay is unavailable (UPI fallback)
+  NFR-14  Retry logic for email sending (3 attempts with exponential backoff)
+  NFR-15  Transaction management for order placement + payment creation
+
+9.4 SCALABILITY (FUTURE)
+
+  NFR-16  Stateless backend (no server-side sessions) for horizontal scaling
+  NFR-17  Database connection pooling via HikariCP
+  NFR-18  CDN-served frontend (Vercel Edge Network)
+
+9.5 MEDIA CONSTRAINTS
+
+  NFR-19  Image uploads: max 3MB per file
+  NFR-20  Audio uploads: max 3MB per file
+  NFR-21  Video uploads: NOT permitted
+  NFR-22  Accepted image formats: JPEG, PNG, WebP
+  NFR-23  Accepted audio formats: MP3, WAV, M4A
+
+================================================================================
+10. GLOSSARY
+================================================================================
+
+  Term                Definition
+  ──────────────────  ──────────────────────────────────────────────────────
+  D2C                 Direct-to-Consumer; selling directly without
+                      intermediary retailers
+  OTP                 One-Time Password; a numeric code sent via SMS for
+                      authentication
+  JWT                 JSON Web Token; a compact token format used for
+                      secure information exchange
+  UTR                 Unique Transaction Reference; a reference number
+                      generated by banks for UPI transactions
+  UPI                 Unified Payments Interface; an instant real-time
+                      payment system by NPCI (India)
+  Razorpay            Indian payment gateway supporting cards, UPI,
+                      netbanking, and wallets
+  Shiprocket          Indian shipping aggregator for order fulfillment
+  Supabase            Open-source Firebase alternative providing auth,
+                      database, and storage
+  LCP                 Largest Contentful Paint; a Core Web Vital metric
+                      measuring load performance
+  HikariCP            High-performance JDBC connection pool used by
+                      Spring Boot
+  CSP                 Content Security Policy; HTTP header to prevent XSS
+  CORS                Cross-Origin Resource Sharing; browser security
+                      mechanism for cross-domain requests
+
+================================================================================
+END OF DOCUMENT — FLAMIA_PROJECT_OVERVIEW.txt
+================================================================================

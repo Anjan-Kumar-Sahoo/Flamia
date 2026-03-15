@@ -1,0 +1,672 @@
+================================================================================
+FLAMIA — AUTHENTICATION, SECURITY & DEPLOYMENT
+Supabase Auth + Spring Security + JWT
+================================================================================
+
+Document Version : 1.0
+Last Updated     : 2026-03-15
+Status           : Production-Ready Specification
+Classification   : Internal Engineering Document
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Authentication Architecture Overview
+2. OTP Flow — Detailed
+3. JWT Validation Flow
+4. User Synchronization
+5. Role-Based Access Control
+6. API Protection Strategy
+7. CORS Strategy
+8. Security Headers
+9. Rate Limiting
+10. Input Validation & Sanitization
+11. Sensitive Data Handling
+12. Security Checklist
+
+================================================================================
+1. AUTHENTICATION ARCHITECTURE OVERVIEW
+================================================================================
+
+Flamia uses a split authentication architecture:
+
+  Frontend Layer:
+    Supabase JS SDK handles OTP sending and verification.
+    Supabase Auth issues JWT tokens upon successful OTP verification.
+    The frontend stores the Supabase session (access token + refresh token).
+
+  Backend Layer:
+    Spring Security validates Supabase-issued JWTs on every request.
+    No authentication logic on the backend — only token validation.
+    The backend trusts Supabase as the identity provider.
+
+  Flow Summary:
+    1. User authenticates via Supabase Auth (phone OTP)
+    2. Supabase issues JWT
+    3. Frontend attaches JWT to all API requests
+    4. Backend validates JWT signature and claims
+    5. Backend looks up user by Supabase UID
+    6. Request proceeds with authenticated context
+
+  Key Design Decision:
+    The backend does NOT communicate with Supabase Auth API directly.
+    JWT validation is done offline using the JWT secret (HMAC-SHA256).
+    This eliminates a network dependency on every authenticated request.
+
+================================================================================
+2. OTP FLOW — DETAILED
+================================================================================
+
+2.1 PHONE NUMBER INPUT
+
+  Frontend Validation:
+    - Country code fixed to +91 (India only)
+    - Mobile number: exactly 10 digits
+    - First digit must be 6, 7, 8, or 9 (valid Indian mobile prefixes)
+    - Regex: /^[6-9]\d{9}$/
+    - Display format: +91 XXXXX XXXXX
+
+2.2 OTP SENDING
+
+  Frontend → Supabase:
+    supabase.auth.signInWithOtp({
+      phone: '+91XXXXXXXXXX',
+      options: {
+        channel: 'sms'
+      }
+    })
+
+  Supabase Behavior:
+    - Sends 6-digit OTP via SMS (Supabase's configured SMS provider)
+    - OTP expires in 60 seconds (Supabase default)
+    - Rate limited by Supabase (default: 1 OTP per 60 seconds per phone)
+    - If user does not exist in Supabase Auth, a new auth user is created
+
+  Frontend UI During Wait:
+    - Phone input disabled
+    - Timer showing remaining time (60 seconds countdown)
+    - "Resend OTP" link appears after timer expires
+    - OTP input field (6 individual digit boxes) auto-focused
+
+2.3 OTP VERIFICATION
+
+  Frontend → Supabase:
+    supabase.auth.verifyOtp({
+      phone: '+91XXXXXXXXXX',
+      token: '123456',
+      type: 'sms'
+    })
+
+  Success Response:
+    {
+      user: {
+        id: "supabase-uuid",
+        phone: "+91XXXXXXXXXX",
+        ...
+      },
+      session: {
+        access_token: "eyJhbGciOiJIUzI1...",
+        refresh_token: "...",
+        expires_in: 3600,
+        expires_at: 1710532800
+      }
+    }
+
+  Failure Handling:
+    - Invalid OTP: Display "Incorrect OTP. Please try again."
+    - Expired OTP: Display "OTP has expired. Please request a new one."
+    - Too many attempts: Display "Too many attempts. Please try later."
+
+2.4 POST-OTP ACTIONS (FRONTEND)
+
+  After successful OTP verification:
+
+  Step 1: Store session in auth Zustand store
+  Step 2: Configure Axios interceptor with access token
+  Step 3: Call POST /api/auth/sync with Supabase user data
+  Step 4: Receive user role from backend response
+  Step 5: Update auth store with user profile and role
+  Step 6: Redirect to return URL or home page
+  Step 7: Set up auth state change listener for token refresh
+
+2.5 TOKEN REFRESH
+
+  Supabase JWT tokens expire after 1 hour (3600 seconds) by default.
+
+  Automatic Refresh:
+    Supabase JS SDK automatically refreshes tokens before expiry.
+    The onAuthStateChange listener detects TOKEN_REFRESHED events.
+    Frontend updates the stored session with the new access token.
+
+  Manual Refresh (Fallback):
+    If a 401 response is received from the backend:
+    1. Axios interceptor calls supabase.auth.refreshSession()
+    2. If successful, retries the original request with new token
+    3. If refresh fails, logs out user and redirects to /login
+
+================================================================================
+3. JWT VALIDATION FLOW
+================================================================================
+
+3.1 JWT STRUCTURE (SUPABASE-ISSUED)
+
+  Header:
+    {
+      "alg": "HS256",
+      "typ": "JWT"
+    }
+
+  Payload:
+    {
+      "aud": "authenticated",
+      "exp": 1710536400,
+      "iat": 1710532800,
+      "iss": "https://<project-ref>.supabase.co/auth/v1",
+      "sub": "supabase-user-uuid",
+      "phone": "+91XXXXXXXXXX",
+      "role": "authenticated",
+      "session_id": "...",
+      "app_metadata": { "provider": "phone" },
+      "user_metadata": {}
+    }
+
+  Signature:
+    HMAC-SHA256(base64(header) + "." + base64(payload), jwt_secret)
+
+3.2 BACKEND JWT VALIDATION STEPS
+
+  JwtAuthenticationFilter (OncePerRequestFilter):
+
+  Step 1: Extract Authorization header from request
+  Step 2: Check if header starts with "Bearer "
+  Step 3: Extract token string (remove "Bearer " prefix)
+  Step 4: Pass token to JwtTokenValidator
+
+  JwtTokenValidator:
+
+  Step 5:  Parse JWT using HMAC-SHA256 algorithm with SUPABASE_JWT_SECRET
+  Step 6:  Verify signature — reject if tampered
+  Step 7:  Check "exp" claim — reject if expired
+  Step 8:  Check "iss" claim — must match Supabase project URL
+  Step 9:  Check "aud" claim — must be "authenticated"
+  Step 10: Extract "sub" claim as Supabase user ID
+  Step 11: Extract "phone" claim
+
+  JwtAuthenticationFilter (continued):
+
+  Step 12: Query UserRepository.findBySupabaseId(sub)
+  Step 13: If user not found → return 401 (user must sync first)
+  Step 14: Create UserPrincipal with user ID, phone, and role
+  Step 15: Create UsernamePasswordAuthenticationToken
+  Step 16: Set authentication in SecurityContextHolder
+  Step 17: Continue filter chain
+
+3.3 JWT VALIDATION LIBRARY
+
+  Library: io.jsonwebtoken:jjwt (Java JWT library)
+  Version: 0.12.x
+  Algorithm: HMAC-SHA256 (HS256) — matches Supabase default
+
+  Key: SUPABASE_JWT_SECRET environment variable
+  This is the JWT secret from Supabase project settings → API → JWT Secret.
+
+3.4 PUBLIC ENDPOINTS (NO JWT REQUIRED)
+
+  The JwtAuthenticationFilter skips validation for requests matching:
+    GET  /api/products/**
+    GET  /api/categories/**
+    GET  /api/reviews/product/**
+    POST /api/auth/sync
+
+  Implementation: Check request path against whitelist before processing.
+  If path matches whitelist, pass request through without JWT extraction.
+
+================================================================================
+4. USER SYNCHRONIZATION
+================================================================================
+
+4.1 SYNC ENDPOINT
+
+  Endpoint: POST /api/auth/sync
+  Auth: Supabase JWT required (validated by filter)
+  Purpose: Create or update user in Flamia's database after OTP login
+
+  Request Body:
+    {
+      "supabaseId": "supabase-user-uuid",
+      "phone": "+91XXXXXXXXXX",
+      "name": "Customer Name" (optional, for updates)
+    }
+
+  Process:
+    Step 1: Extract supabaseId from JWT "sub" claim
+    Step 2: Verify request supabaseId matches JWT sub claim
+    Step 3: Check if user exists in database (by supabaseId)
+    Step 4a: If exists → update last login timestamp, return existing user
+    Step 4b: If not exists → create new user with:
+              - supabaseId from JWT
+              - phone from JWT
+              - role = CUSTOMER (default)
+              - name from request body (if provided)
+    Step 5: Return UserResponse with id, phone, name, email, role
+
+  Response:
+    {
+      "success": true,
+      "message": "User synced successfully",
+      "data": {
+        "id": "flamia-user-uuid",
+        "phone": "+91XXXXXXXXXX",
+        "name": "Customer Name",
+        "email": null,
+        "role": "CUSTOMER"
+      }
+    }
+
+4.2 WHY SYNC IS NEEDED
+
+  Supabase Auth manages authentication (identity verification).
+  Flamia's database manages application data (roles, orders, etc.).
+  The sync endpoint bridges these two systems:
+    - Creates a Flamia user record on first login
+    - Maps Supabase UID to Flamia's internal user ID
+    - Allows the backend to store application-specific user data
+    - Enables role management (CUSTOMER/ADMIN) in Flamia's database
+
+================================================================================
+5. ROLE-BASED ACCESS CONTROL
+================================================================================
+
+5.1 ROLE DEFINITIONS
+
+  Role: CUSTOMER
+    Default role assigned on first sync.
+    Can browse, purchase, review, and manage own account.
+
+  Role: ADMIN
+    Manually assigned by directly updating the database.
+    Has all CUSTOMER permissions plus administrative capabilities.
+
+5.2 ROLE ASSIGNMENT
+
+  Method: Direct database UPDATE (no self-service role elevation)
+
+  To make a user an admin:
+    UPDATE users SET role = 'ADMIN' WHERE phone = '+91XXXXXXXXXX';
+
+  Rationale:
+    - Admin accounts are rare (1-2 people for a D2C brand)
+    - No need for a role management API
+    - Direct DB update is the most secure approach
+    - Eliminates API surface for role escalation attacks
+
+5.3 ROLE ENFORCEMENT LAYERS
+
+  Layer 1 — URL Pattern Security (SecurityConfig):
+    /api/admin/** restricted to ADMIN role at Spring Security level.
+    All other authenticated endpoints allow CUSTOMER or ADMIN.
+
+  Layer 2 — Method-Level Security (Service):
+    @PreAuthorize("hasRole('ADMIN')") on admin service methods.
+    Provides defense-in-depth if URL patterns are misconfigured.
+
+  Layer 3 — Resource Ownership (Service):
+    Customer operations verify resource ownership:
+    - Orders: userId matches current user
+    - Reviews: userId matches current user
+    - Addresses: userId matches current user
+    Admin can access all resources regardless of ownership.
+
+5.4 AUTHORIZATION DECISION TABLE
+
+  Resource         Action          GUEST   CUSTOMER   ADMIN
+  ───────────────  ──────────────  ──────  ─────────  ──────
+  Products         List/View       ✓       ✓          ✓
+  Products         Create/Edit     ✗       ✗          ✓
+  Products         Delete          ✗       ✗          ✓
+  Categories       List/View       ✓       ✓          ✓
+  Categories       Create/Edit     ✗       ✗          ✓
+  Orders           Create          ✗       ✓ (own)    ✓
+  Orders           View            ✗       ✓ (own)    ✓ (all)
+  Orders           Update Status   ✗       ✗          ✓
+  Payments         Create          ✗       ✓ (own)    ✓
+  Payments         Verify UPI      ✗       ✗          ✓
+  Reviews          View            ✓       ✓          ✓
+  Reviews          Create          ✗       ✓ (owned)  ✓
+  Reviews          Edit            ✗       ✓ (own)    ✗
+  Reviews          Delete          ✗       ✓ (own)    ✓ (any)
+  Addresses        CRUD            ✗       ✓ (own)    ✓ (own)
+  Coupons          Validate        ✗       ✓          ✓
+  Coupons          Manage          ✗       ✗          ✓
+  Dashboard        View            ✗       ✗          ✓
+
+================================================================================
+6. API PROTECTION STRATEGY
+================================================================================
+
+6.1 AUTHENTICATION PROTECTION
+
+  Every request to a protected endpoint must include:
+    Authorization: Bearer <supabase_jwt>
+
+  Missing or malformed header → HTTP 401 Unauthorized:
+    {
+      "success": false,
+      "message": "Authentication required",
+      "errors": ["Missing or invalid Authorization header"]
+    }
+
+  Invalid or expired JWT → HTTP 401 Unauthorized:
+    {
+      "success": false,
+      "message": "Invalid token",
+      "errors": ["JWT signature verification failed"]
+    }
+
+6.2 AUTHORIZATION PROTECTION
+
+  Insufficient role → HTTP 403 Forbidden:
+    {
+      "success": false,
+      "message": "Access denied",
+      "errors": ["Admin role required"]
+    }
+
+  Resource not owned by user → HTTP 403 Forbidden:
+    {
+      "success": false,
+      "message": "Access denied",
+      "errors": ["You do not have permission to access this resource"]
+    }
+
+6.3 INPUT VALIDATION PROTECTION
+
+  All request DTOs use Jakarta Bean Validation annotations:
+    @NotNull, @NotBlank, @Size, @Min, @Max, @Pattern, @Email
+
+  Invalid input → HTTP 400 Bad Request:
+    {
+      "success": false,
+      "message": "Validation failed",
+      "errors": [
+        "Product name must not be blank",
+        "Price must be greater than 0"
+      ]
+    }
+
+6.4 FILE UPLOAD PROTECTION
+
+  File validation rules:
+    - Max file size: 3MB (3,145,728 bytes)
+    - Allowed image MIME types: image/jpeg, image/png, image/webp
+    - Allowed audio MIME types: audio/mpeg, audio/wav, audio/mp4
+    - Video MIME types explicitly rejected
+    - File extension validated against MIME type
+    - Files scanned for valid magic bytes (preventing extension spoofing)
+
+  Validation failure → HTTP 400 Bad Request:
+    {
+      "success": false,
+      "message": "Media validation failed",
+      "errors": ["File size exceeds 3MB limit"]
+    }
+
+6.5 SQL INJECTION PROTECTION
+
+  Spring Data JPA uses parameterized queries for ALL database operations.
+  No string concatenation in queries.
+  Custom @Query annotations use named parameters (:paramName).
+  Native SQL queries (if any) use parameterized PreparedStatements.
+
+6.6 XSS PROTECTION
+
+  Frontend: React's JSX escaping prevents XSS in rendered content.
+  Backend: Text inputs sanitized for HTML tags before storage.
+  API: No HTML rendering on the backend (JSON API only).
+  Review comments stored as plain text, not HTML.
+
+================================================================================
+7. CORS STRATEGY
+================================================================================
+
+7.1 CORS CONFIGURATION
+
+  File: CorsConfig.java (implements WebMvcConfigurer)
+
+  Allowed Origins:
+    Development: http://localhost:5173 (Vite dev server)
+    Production:  https://flamia.vercel.app (Vercel deployment URL)
+    Value loaded from FRONTEND_URL environment variable.
+
+  Allowed Methods:
+    GET, POST, PUT, DELETE, OPTIONS
+
+  Allowed Headers:
+    Authorization, Content-Type, Accept, Origin, X-Requested-With
+
+  Exposed Headers:
+    X-Total-Count (for pagination metadata)
+
+  Allow Credentials: true
+    Required for Authorization header on cross-origin requests.
+
+  Max Age: 3600 seconds (1 hour)
+    Preflight responses cached for 1 hour.
+
+7.2 CORS IMPLEMENTATION
+
+  CorsConfig.java:
+    @Configuration
+    public class CorsConfig implements WebMvcConfigurer {
+        @Value("${flamia.frontend-url}")
+        private String frontendUrl;
+
+        @Override
+        public void addCorsMappings(CorsRegistry registry) {
+            registry.addMapping("/api/**")
+                .allowedOrigins(frontendUrl)
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("Authorization", "Content-Type", "Accept",
+                                "Origin", "X-Requested-With")
+                .exposedHeaders("X-Total-Count")
+                .allowCredentials(true)
+                .maxAge(3600);
+        }
+    }
+
+  The CORS configuration is also registered in Spring Security's
+  SecurityFilterChain to ensure preflight OPTIONS requests are not
+  blocked by the security filter.
+
+7.3 CORS RULES
+
+  Rule 1: Only the exact frontend origin is allowed (no wildcards)
+  Rule 2: Credentials must be allowed for JWT header transmission
+  Rule 3: The FRONTEND_URL must NOT have a trailing slash
+  Rule 4: In development, localhost:5173 is the allowed origin
+  Rule 5: In production, the exact Vercel deployment URL is used
+
+================================================================================
+8. SECURITY HEADERS
+================================================================================
+
+  The backend sets the following security-related HTTP headers:
+
+  Header                          Value                     Purpose
+  ──────────────────────────────  ────────────────────────  ─────────────────
+  X-Content-Type-Options          nosniff                   Prevent MIME sniff
+  X-Frame-Options                 DENY                      Prevent clickjack
+  X-XSS-Protection                0                         Use CSP instead
+  Strict-Transport-Security       max-age=31536000;         Force HTTPS
+                                  includeSubDomains
+  Cache-Control                   no-store                  For auth responses
+  Referrer-Policy                 strict-origin-when-       Limit referrer info
+                                  cross-origin
+
+  The frontend (Vercel) sets Content-Security-Policy headers via
+  vercel.json configuration:
+    default-src 'self';
+    script-src 'self' https://checkout.razorpay.com;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src 'self' https://fonts.gstatic.com;
+    img-src 'self' https://<supabase-project>.supabase.co data:;
+    media-src 'self' https://<supabase-project>.supabase.co;
+    connect-src 'self' https://<backend>.onrender.com
+                https://<supabase-project>.supabase.co
+                https://api.razorpay.com;
+    frame-src https://api.razorpay.com;
+
+================================================================================
+9. RATE LIMITING
+================================================================================
+
+9.1 OTP RATE LIMITING (SUPABASE-MANAGED)
+
+  Supabase Auth has built-in rate limiting for OTP requests:
+    - 1 OTP per 60 seconds per phone number
+    - Maximum 5 OTP attempts per phone per hour
+    - These are configurable in Supabase dashboard
+
+  The frontend enforces a 60-second cooldown timer on the "Send OTP"
+  button to match the Supabase rate limit.
+
+9.2 API RATE LIMITING (BACKEND)
+
+  For the free-tier deployment on Render, explicit rate limiting is
+  implemented at the application level using a simple in-memory
+  rate limiter (bucket4j or custom implementation).
+
+  Rate limits per authenticated user:
+    Order creation:   5 per hour
+    Review creation:  10 per hour
+    Payment attempts: 10 per hour
+    Address CRUD:     20 per hour
+    Coupon validation: 30 per hour
+
+  Rate limits per IP (unauthenticated):
+    Product listing:  100 per minute
+    Product detail:   100 per minute
+    Auth sync:        10 per minute
+
+  Rate limit exceeded → HTTP 429 Too Many Requests:
+    {
+      "success": false,
+      "message": "Rate limit exceeded",
+      "errors": ["Too many requests. Please try again later."]
+    }
+
+================================================================================
+10. INPUT VALIDATION & SANITIZATION
+================================================================================
+
+10.1 PHONE NUMBER VALIDATION
+
+  Backend validation for phone numbers:
+    - Pattern: ^\+91[6-9]\d{9}$
+    - Length: exactly 13 characters (including +91)
+    - Must be a valid Indian mobile number prefix (6, 7, 8, 9)
+
+10.2 PINCODE VALIDATION
+
+  Indian PIN code validation:
+    - Pattern: ^[1-9][0-9]{5}$
+    - Length: exactly 6 digits
+    - First digit cannot be 0
+
+10.3 TEXT INPUT SANITIZATION
+
+  All text inputs (product names, descriptions, review comments):
+    - Trimmed whitespace
+    - HTML tags stripped (prevents stored XSS)
+    - Consecutive whitespace collapsed
+    - Maximum length enforced per field
+
+10.4 PRICE VALIDATION
+
+  Price fields (BigDecimal):
+    - Must be positive (> 0)
+    - Maximum 2 decimal places
+    - Maximum value: 999999.99
+
+10.5 FILE URL VALIDATION
+
+  Supabase Storage URLs must:
+    - Start with https://<project-ref>.supabase.co/storage/v1/
+    - Contain the correct bucket name
+    - Not contain path traversal sequences (../)
+    - Match expected file extension
+
+================================================================================
+11. SENSITIVE DATA HANDLING
+================================================================================
+
+11.1 DATA CLASSIFICATION
+
+  CRITICAL (never logged, encrypted at rest via Supabase):
+    - Supabase JWT Secret
+    - Razorpay Key Secret
+    - SMTP credentials
+    - Supabase Service Key
+
+  SENSITIVE (partially masked in logs):
+    - Phone numbers: +91****1234
+    - Email addresses: a****@gmail.com
+    - UPI payment details
+
+  INTERNAL (not exposed to frontend):
+    - User internal UUIDs (only used in API paths)
+    - Database IDs for administrative operations
+    - Server-side computation details
+
+11.2 ENVIRONMENT VARIABLE SECURITY
+
+  All secrets stored as environment variables:
+    - Never committed to Git repositories
+    - .env files listed in .gitignore
+    - .env.example contains placeholder keys (no real values)
+    - Render and Vercel provide secure env variable storage
+
+11.3 JWT TOKEN HANDLING
+
+  Frontend:
+    - JWT stored in Zustand store (JavaScript memory)
+    - Not stored in cookies (prevents CSRF)
+    - Not stored in localStorage (prevents XSS access)
+    - Supabase SDK manages token lifecycle
+    - Cleared on logout
+
+  Backend:
+    - JWT never logged (even in debug mode)
+    - JWT not stored in database
+    - JWT validation is stateless (no token storage needed)
+
+================================================================================
+12. SECURITY CHECKLIST
+================================================================================
+
+  Pre-Deployment Security Verification:
+
+  [ ] SUPABASE_JWT_SECRET is set and matches Supabase project settings
+  [ ] RAZORPAY_KEY_SECRET is set for payment signature verification
+  [ ] CORS origin matches exact Vercel deployment URL (no wildcards)
+  [ ] CSRF disabled in Spring Security (stateless API confirmed)
+  [ ] Session management set to STATELESS
+  [ ] All admin endpoints require ADMIN role
+  [ ] All customer endpoints verify resource ownership
+  [ ] File upload size limit enforced at 3MB
+  [ ] Video MIME types explicitly rejected
+  [ ] SQL injection: all queries parameterized (verified)
+  [ ] No sensitive data in Git history
+  [ ] .env files in .gitignore
+  [ ] HTTPS enforced (Render and Vercel provide this by default)
+  [ ] Security headers configured
+  [ ] Rate limiting configured for critical endpoints
+  [ ] Phone number validation prevents non-Indian numbers
+  [ ] Error messages do not leak internal system details
+  [ ] JWT expiration validated on every request
+  [ ] Token refresh implemented for seamless UX
+
+================================================================================
+END OF DOCUMENT — FLAMIA_AUTH_SECURITY_DEPLOYMENT.txt
+================================================================================

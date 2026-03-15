@@ -1,0 +1,1003 @@
+================================================================================
+FLAMIA — BACKEND SYSTEM DESIGN
+Spring Boot 3 + Java 17 + Spring Security + Spring Data JPA
+================================================================================
+
+Document Version : 1.0
+Last Updated     : 2026-03-15
+Status           : Production-Ready Specification
+Classification   : Internal Engineering Document
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Backend Architecture Overview
+2. Package Structure
+3. Layered Architecture Detail
+4. Service Boundaries
+5. Security Architecture
+6. Payment Module Design
+7. Order Module Design
+8. Review Module Design
+9. Product Module Design
+10. Coupon Module Design
+11. Address Module Design
+12. Notification Module Design
+13. Media/Storage Module Design
+14. Exception Handling Strategy
+15. Configuration Management
+16. Logging Strategy
+
+================================================================================
+1. BACKEND ARCHITECTURE OVERVIEW
+================================================================================
+
+The Flamia backend is a monolithic Spring Boot 3 application following a
+strict layered architecture pattern. The application is written in Java 17
+and uses Spring Data JPA for database access, Spring Security for
+authentication/authorization, and integrates with external services
+(Razorpay, Supabase Storage, SMTP) through dedicated service classes.
+
+Design Principles:
+  - Strict layer separation: Controller → Service → Repository
+  - No business logic in controllers or repositories
+  - DTOs for all API request/response payloads (never expose entities)
+  - Constructor-based dependency injection (no field injection)
+  - Interface-based service layer for testability
+  - Centralized exception handling via @ControllerAdvice
+  - Environment-based configuration via application.yml + env variables
+  - Stateless authentication (no server-side sessions)
+
+Application Entry Point:
+  FlamiaApplication.java with @SpringBootApplication annotation
+
+Server Configuration:
+  Port: 8080 (configurable via SERVER_PORT env variable)
+  Context Path: /api
+  All endpoints prefixed with /api
+
+================================================================================
+2. PACKAGE STRUCTURE
+================================================================================
+
+com.flamia/
+├── FlamiaApplication.java
+│
+├── config/
+│   ├── SecurityConfig.java           # Spring Security configuration
+│   ├── CorsConfig.java               # CORS configuration
+│   ├── WebConfig.java                # Web MVC configuration
+│   ├── JwtConfig.java                # JWT validation beans
+│   └── RazorpayConfig.java           # Razorpay client bean
+│
+├── security/
+│   ├── JwtAuthenticationFilter.java   # OncePerRequestFilter for JWT
+│   ├── JwtTokenValidator.java         # Supabase JWT validation logic
+│   ├── UserPrincipal.java             # Custom Authentication principal
+│   └── SecurityConstants.java         # Security-related constants
+│
+├── controller/
+│   ├── AuthController.java            # POST /auth/sync
+│   ├── ProductController.java         # Product endpoints
+│   ├── CategoryController.java        # Category endpoints
+│   ├── OrderController.java           # Order endpoints (customer)
+│   ├── PaymentController.java         # Payment endpoints
+│   ├── ReviewController.java          # Review endpoints
+│   ├── CouponController.java          # Coupon validation endpoint
+│   ├── AddressController.java         # Address CRUD endpoints
+│   ├── AdminProductController.java    # Admin product management
+│   ├── AdminOrderController.java      # Admin order management
+│   ├── AdminCouponController.java     # Admin coupon management
+│   ├── AdminReviewController.java     # Admin review moderation
+│   ├── AdminCategoryController.java   # Admin category management
+│   └── AdminDashboardController.java  # Admin analytics endpoints
+│
+├── service/
+│   ├── AuthService.java
+│   ├── ProductService.java
+│   ├── CategoryService.java
+│   ├── OrderService.java
+│   ├── PaymentService.java
+│   ├── RazorpayService.java
+│   ├── ReviewService.java
+│   ├── CouponService.java
+│   ├── AddressService.java
+│   ├── StorageService.java            # Supabase Storage REST client
+│   ├── EmailService.java              # Email notification sender
+│   └── AdminDashboardService.java
+│
+├── repository/
+│   ├── UserRepository.java
+│   ├── ProductRepository.java
+│   ├── CategoryRepository.java
+│   ├── OrderRepository.java
+│   ├── OrderItemRepository.java
+│   ├── PaymentRepository.java
+│   ├── ReviewRepository.java
+│   ├── ReviewMediaRepository.java
+│   ├── CouponRepository.java
+│   ├── AddressRepository.java
+│   └── CouponUsageRepository.java
+│
+├── entity/
+│   ├── User.java
+│   ├── Product.java
+│   ├── ProductImage.java
+│   ├── Category.java
+│   ├── Order.java
+│   ├── OrderItem.java
+│   ├── Payment.java
+│   ├── Review.java
+│   ├── ReviewMedia.java
+│   ├── Coupon.java
+│   ├── CouponUsage.java
+│   └── Address.java
+│
+├── dto/
+│   ├── request/
+│   │   ├── AuthSyncRequest.java
+│   │   ├── CreateOrderRequest.java
+│   │   ├── RazorpayPaymentRequest.java
+│   │   ├── UpiPaymentRequest.java
+│   │   ├── CreateReviewRequest.java
+│   │   ├── UpdateReviewRequest.java
+│   │   ├── ValidateCouponRequest.java
+│   │   ├── CreateAddressRequest.java
+│   │   ├── UpdateAddressRequest.java
+│   │   ├── AdminProductRequest.java
+│   │   ├── AdminOrderStatusRequest.java
+│   │   ├── AdminTrackingRequest.java
+│   │   ├── AdminCouponRequest.java
+│   │   ├── AdminCategoryRequest.java
+│   │   ├── AdminPaymentVerifyRequest.java
+│   │   └── ProductFilterRequest.java
+│   │
+│   └── response/
+│       ├── ApiResponse.java            # Generic wrapper {success, message, data}
+│       ├── UserResponse.java
+│       ├── ProductResponse.java
+│       ├── ProductDetailResponse.java
+│       ├── CategoryResponse.java
+│       ├── OrderResponse.java
+│       ├── OrderDetailResponse.java
+│       ├── PaymentResponse.java
+│       ├── ReviewResponse.java
+│       ├── CouponValidationResponse.java
+│       ├── AddressResponse.java
+│       ├── DashboardResponse.java
+│       └── PagedResponse.java          # Pagination wrapper
+│
+├── enums/
+│   ├── UserRole.java                  # CUSTOMER, ADMIN
+│   ├── OrderStatus.java              # PLACED, CONFIRMED, SHIPPED,
+│   │                                  # DELIVERED, CANCELLED
+│   ├── PaymentStatus.java            # PENDING, PAID, FAILED, REFUNDED
+│   ├── PaymentMethod.java            # RAZORPAY, UPI_MANUAL
+│   ├── ReviewMediaType.java          # IMAGE, AUDIO
+│   ├── CouponType.java               # PERCENTAGE, FIXED_AMOUNT
+│   └── CouponStatus.java             # ACTIVE, INACTIVE, EXPIRED
+│
+├── exception/
+│   ├── GlobalExceptionHandler.java    # @ControllerAdvice
+│   ├── ResourceNotFoundException.java
+│   ├── BadRequestException.java
+│   ├── UnauthorizedException.java
+│   ├── ForbiddenException.java
+│   ├── PaymentException.java
+│   ├── CouponException.java
+│   ├── ReviewNotAllowedException.java
+│   ├── MediaValidationException.java
+│   └── DuplicateResourceException.java
+│
+├── mapper/
+│   ├── ProductMapper.java             # Entity ↔ DTO mapping
+│   ├── OrderMapper.java
+│   ├── ReviewMapper.java
+│   ├── CouponMapper.java
+│   ├── AddressMapper.java
+│   ├── UserMapper.java
+│   └── CategoryMapper.java
+│
+├── util/
+│   ├── SlugGenerator.java             # URL-friendly slug creation
+│   ├── OrderIdGenerator.java          # FLM-YYYYMMDD-XXXX format
+│   └── PriceCalculator.java           # Price and discount computation
+│
+└── scheduler/
+    └── OrderCleanupScheduler.java     # Auto-cancel unpaid orders (24h)
+
+================================================================================
+3. LAYERED ARCHITECTURE DETAIL
+================================================================================
+
+3.1 CONTROLLER LAYER
+
+  Responsibility:
+    - Define REST API endpoints with proper HTTP methods
+    - Parse and validate incoming request DTOs (@Valid + Bean Validation)
+    - Extract authenticated user from SecurityContext
+    - Delegate to service layer
+    - Map service results to response DTOs
+    - Return appropriate HTTP status codes
+
+  Rules:
+    - No business logic in controllers
+    - No direct repository access
+    - No entity objects in method signatures (DTOs only)
+    - Every endpoint annotated with proper @RequestMapping
+    - Input validation via @Valid on request body DTOs
+    - Authentication info obtained via @AuthenticationPrincipal
+
+  Response Pattern:
+    All API responses wrapped in ApiResponse<T>:
+    {
+      "success": true,
+      "message": "Products retrieved successfully",
+      "data": { ... }
+    }
+
+    Error responses:
+    {
+      "success": false,
+      "message": "Product not found",
+      "errors": ["Product with slug 'xyz' does not exist"]
+    }
+
+3.2 SERVICE LAYER
+
+  Responsibility:
+    - All business logic and validation
+    - Orchestrate multi-repository operations
+    - Transaction management (@Transactional)
+    - External service integration (Razorpay, Supabase, Email)
+    - Authorization checks (e.g., user owns resource)
+    - Exception throwing for business rule violations
+
+  Rules:
+    - Service classes are concrete (no interface needed for monolith)
+    - Constructor injection for all dependencies
+    - @Transactional on methods that modify data
+    - @Transactional(readOnly = true) on read-only methods
+    - Business exceptions thrown as custom exception types
+    - No HTTP-specific concerns (no HttpServletRequest, no ResponseEntity)
+
+3.3 REPOSITORY LAYER
+
+  Responsibility:
+    - Database CRUD operations via Spring Data JPA
+    - Custom query methods using @Query annotation
+    - Pagination and sorting support via Pageable
+
+  Rules:
+    - Extend JpaRepository<Entity, IdType>
+    - No business logic
+    - Use derived query methods where possible
+    - Use @Query for complex queries (JPQL preferred over native SQL)
+    - Return Optional<T> for single-entity lookups
+    - Return Page<T> for paginated results
+
+================================================================================
+4. SERVICE BOUNDARIES
+================================================================================
+
+  Service               Depends On                  External Dependencies
+  ────────────────────  ────────────────────────── ────────────────────────
+  AuthService           UserRepository              None
+  ProductService        ProductRepository,          None
+                        CategoryRepository
+  CategoryService       CategoryRepository          None
+  OrderService          OrderRepository,            EmailService
+                        OrderItemRepository,
+                        ProductService,
+                        CouponService,
+                        AddressService,
+                        PaymentService
+  PaymentService        PaymentRepository,          RazorpayService
+                        OrderRepository
+  RazorpayService       None                        Razorpay Java SDK
+  ReviewService         ReviewRepository,           None
+                        ReviewMediaRepository,
+                        OrderRepository,
+                        ProductRepository
+  CouponService         CouponRepository,           None
+                        CouponUsageRepository
+  AddressService        AddressRepository           None
+  StorageService        None                        Supabase Storage REST
+  EmailService          None                        SMTP Server
+  AdminDashboardService OrderRepository,            None
+                        PaymentRepository,
+                        UserRepository
+
+  Dependency Rules:
+    - Services may depend on other services and repositories
+    - No circular dependencies allowed
+    - OrderService is the largest service with most dependencies
+    - External service wrappers (RazorpayService, StorageService,
+      EmailService) should not depend on other services
+
+================================================================================
+5. SECURITY ARCHITECTURE
+================================================================================
+
+5.1 AUTHENTICATION FLOW (BACKEND)
+
+  Step 1: Frontend sends request with Authorization: Bearer <supabase_jwt>
+  Step 2: JwtAuthenticationFilter intercepts the request
+  Step 3: Filter extracts JWT from Authorization header
+  Step 4: JwtTokenValidator validates the JWT:
+           a. Verify signature using Supabase JWT secret
+           b. Check expiration (exp claim)
+           c. Check issuer matches Supabase project URL
+           d. Extract user ID (sub claim)
+           e. Extract phone number from claims
+  Step 5: Filter loads User from database using Supabase user ID
+  Step 6: If user exists, create UserPrincipal and set in SecurityContext
+  Step 7: If user doesn't exist, return 401 Unauthorized
+  Step 8: Request proceeds to controller with authenticated context
+
+5.2 SPRING SECURITY CONFIGURATION
+
+  SecurityFilterChain Configuration:
+    - CSRF disabled (stateless API)
+    - Session management: STATELESS
+    - CORS configuration applied
+    - JwtAuthenticationFilter added before UsernamePasswordAuthenticationFilter
+
+  Endpoint Security Rules:
+    Public (no authentication required):
+      GET  /api/products/**
+      GET  /api/categories/**
+      GET  /api/reviews/product/**
+      POST /api/auth/sync
+
+    Customer (CUSTOMER or ADMIN role):
+      POST /api/orders/**
+      GET  /api/orders/**
+      POST /api/payments/**
+      POST /api/reviews
+      PUT  /api/reviews/**
+      DELETE /api/reviews/**
+      GET  /api/addresses/**
+      POST /api/addresses/**
+      PUT  /api/addresses/**
+      DELETE /api/addresses/**
+      POST /api/coupons/validate
+
+    Admin only (ADMIN role):
+      /api/admin/**
+
+5.3 ROLE-BASED ACCESS CONTROL
+
+  UserRole Enum:
+    CUSTOMER — Standard authenticated user
+    ADMIN    — Administrative user with full access
+
+  Role Assignment:
+    - Default role on first sync: CUSTOMER
+    - Admin role set directly in database (no self-promotion)
+    - Role stored in User entity and loaded on each request
+
+  Method-Level Security:
+    Critical admin operations protected with @PreAuthorize("hasRole('ADMIN')")
+    in addition to URL-pattern security.
+
+================================================================================
+6. PAYMENT MODULE DESIGN
+================================================================================
+
+6.1 PAYMENT FLOW — RAZORPAY (PRIMARY)
+
+  Step 1: Customer initiates payment on frontend
+  Step 2: Frontend calls POST /api/payments/razorpay/create-order
+           Request: { orderId }
+  Step 3: Backend creates Razorpay order via Razorpay Java SDK:
+           - Amount in paise (INR × 100)
+           - Currency: INR
+           - Receipt: Flamia order ID
+  Step 4: Backend saves Payment entity with status PENDING
+  Step 5: Backend returns Razorpay order ID + key to frontend
+  Step 6: Frontend opens Razorpay Checkout modal with order details
+  Step 7: Customer completes payment in Razorpay modal
+  Step 8: Frontend receives payment response (razorpay_payment_id,
+           razorpay_order_id, razorpay_signature)
+  Step 9: Frontend calls POST /api/payments/razorpay/verify
+           Request: { razorpayPaymentId, razorpayOrderId, razorpaySignature }
+  Step 10: Backend verifies signature using Razorpay utility:
+            generated_signature = HMAC_SHA256(razorpay_order_id + "|" +
+                                  razorpay_payment_id, razorpay_key_secret)
+            Compare with razorpay_signature
+  Step 11: If valid:
+            - Update Payment status to PAID
+            - Update Payment with Razorpay references
+            - Update Order status to CONFIRMED
+            - Send confirmation email
+  Step 12: If invalid:
+            - Update Payment status to FAILED
+            - Return error to frontend
+
+6.2 PAYMENT FLOW — MANUAL UPI (FALLBACK)
+
+  Step 1: Customer selects Manual UPI option at checkout
+  Step 2: Frontend displays Flamia's UPI ID to the customer
+  Step 3: Customer makes payment manually via their UPI app
+  Step 4: Customer uploads payment screenshot to Supabase Storage
+  Step 5: Customer enters UTR (Unique Transaction Reference) number
+  Step 6: Frontend calls POST /api/payments/upi/submit
+           Request: {
+             orderId,
+             utrNumber,
+             screenshotUrl  (Supabase Storage URL)
+           }
+  Step 7: Backend creates Payment entity:
+           - status: PENDING
+           - method: UPI_MANUAL
+           - utrNumber
+           - screenshotUrl
+  Step 8: Order status remains PLACED (awaiting admin verification)
+  Step 9: Admin views pending UPI payments in admin panel
+  Step 10: Admin sees screenshot + UTR, verifies externally
+  Step 11: Admin calls POST /api/admin/payments/:paymentId/verify
+            Request: { approved: true/false, remarks: "..." }
+  Step 12: If approved:
+            - Update Payment status to PAID
+            - Update Order status to CONFIRMED
+            - Send confirmation email to customer
+  Step 13: If rejected:
+            - Update Payment status to FAILED
+            - Send rejection email to customer with remarks
+
+6.3 PAYMENT ENTITY FIELDS
+
+  id              : UUID (primary key)
+  orderId         : UUID (foreign key to Order)
+  method          : PaymentMethod enum (RAZORPAY, UPI_MANUAL)
+  status          : PaymentStatus enum (PENDING, PAID, FAILED, REFUNDED)
+  amount          : BigDecimal
+  currency        : String ("INR")
+  razorpayOrderId : String (nullable, for Razorpay only)
+  razorpayPaymentId : String (nullable, for Razorpay only)
+  razorpaySignature : String (nullable, for Razorpay only)
+  utrNumber       : String (nullable, for UPI only)
+  screenshotUrl   : String (nullable, for UPI only)
+  adminRemarks    : String (nullable, for UPI verification)
+  createdAt       : Timestamp
+  updatedAt       : Timestamp
+
+================================================================================
+7. ORDER MODULE DESIGN
+================================================================================
+
+7.1 ORDER LIFECYCLE
+
+  State Machine:
+
+  ┌──────────┐
+  │  PLACED  │ ← Order created, payment pending
+  └────┬─────┘
+       │
+       ├───────────────────────────────────────┐
+       │                                       │
+       ▼                                       ▼
+  ┌──────────────┐                       ┌───────────┐
+  │  CONFIRMED   │ ← Payment verified    │ CANCELLED │ ← Payment failed
+  └──────┬───────┘                       └───────────┘   or admin cancel
+         │                                     ▲         or auto-cancel (24h)
+         ▼                                     │
+  ┌──────────────┐                             │
+  │   SHIPPED    │ ← Admin adds tracking ID ───┘ (cannot cancel after ship)
+  └──────┬───────┘
+         │
+         ▼
+  ┌──────────────┐
+  │  DELIVERED   │ ← Admin marks delivered
+  └──────────────┘
+
+  Valid Transitions:
+    PLACED     → CONFIRMED  (payment verified)
+    PLACED     → CANCELLED  (payment failed, admin cancel, or auto-cancel)
+    CONFIRMED  → SHIPPED    (admin adds tracking ID)
+    CONFIRMED  → CANCELLED  (admin cancel, with refund if paid)
+    SHIPPED    → DELIVERED   (admin marks delivered)
+
+  Invalid Transitions:
+    SHIPPED    → CANCELLED  (cannot cancel after shipping)
+    DELIVERED  → any        (terminal state)
+    CANCELLED  → any        (terminal state)
+
+7.2 ORDER CREATION PROCESS
+
+  Step 1:  Validate authenticated user
+  Step 2:  Validate delivery address exists and belongs to user
+  Step 3:  Validate all cart items:
+            - Products exist and are active
+            - Sufficient stock available
+            - Prices match current database prices
+  Step 4:  Validate coupon (if applied):
+            - Coupon exists and is active
+            - Not expired
+            - Usage limit not exceeded
+            - Minimum order value met
+  Step 5:  Calculate order totals:
+            - Subtotal = sum of (item price × quantity)
+            - Discount = coupon calculation
+            - Total = subtotal - discount
+  Step 6:  Create Order entity with generated order ID (FLM-YYYYMMDD-XXXX)
+  Step 7:  Create OrderItem entities for each cart item
+  Step 8:  Decrement product stock quantities
+  Step 9:  Record coupon usage (if coupon applied)
+  Step 10: Save all entities within a single @Transactional boundary
+  Step 11: Return order details to frontend for payment processing
+
+7.3 AUTO-CANCELLATION
+
+  A scheduled task runs every hour via @Scheduled annotation.
+  It finds all orders where:
+    - status = PLACED
+    - createdAt < (now - 24 hours)
+    - No successful payment exists
+
+  For each such order:
+    - Update status to CANCELLED
+    - Restore product stock quantities
+    - Reverse coupon usage record
+    - Log cancellation reason: "Auto-cancelled: payment not received within 24h"
+
+7.4 ORDER ID FORMAT
+
+  Pattern: FLM-YYYYMMDD-XXXX
+  Example: FLM-20260315-0042
+
+  Components:
+    FLM       — Fixed prefix (Flamia)
+    YYYYMMDD  — Order date
+    XXXX      — Sequential counter per day (0001-9999)
+
+  Generation:
+    OrderIdGenerator utility queries the max counter for the current date
+    and increments by 1. Protected with @Transactional + pessimistic locking
+    to prevent duplicates under concurrent access.
+
+================================================================================
+8. REVIEW MODULE DESIGN
+================================================================================
+
+8.1 REVIEW CONSTRAINTS
+
+  Constraint 1: Purchase Verification
+    A customer can only review a product if they have at least one
+    DELIVERED order containing that product.
+    Implementation: ReviewService checks OrderItemRepository for a
+    matching (userId, productId) pair where order status = DELIVERED.
+
+  Constraint 2: One Review Per Product Per User
+    A customer can submit only one review per product.
+    Implementation: Unique constraint on (user_id, product_id) in
+    reviews table. Service layer checks before creation.
+
+  Constraint 3: Media Limits
+    Images: max 3MB per file, accepted formats: JPEG, PNG, WebP
+    Audio: max 3MB per file, accepted formats: MP3, WAV, M4A
+    Video: NOT allowed (rejected at both frontend and backend)
+    Implementation: Backend validates file size and MIME type from
+    Supabase Storage metadata.
+
+  Constraint 4: Media Upload Flow
+    Media files are uploaded to Supabase Storage by the frontend
+    BEFORE submitting the review to the backend API. The review
+    creation request includes the Supabase Storage URLs.
+    Backend validates:
+      - URLs belong to the Flamia Supabase Storage bucket
+      - File sizes are within limits (via Supabase Storage REST API)
+      - File types are allowed
+
+8.2 REVIEW ENTITY FIELDS
+
+  Review:
+    id          : UUID
+    userId      : UUID (foreign key to User)
+    productId   : UUID (foreign key to Product)
+    rating      : Integer (1-5, required)
+    comment     : String (optional, max 2000 characters)
+    createdAt   : Timestamp
+    updatedAt   : Timestamp
+
+  ReviewMedia:
+    id          : UUID
+    reviewId    : UUID (foreign key to Review)
+    mediaType   : ReviewMediaType enum (IMAGE, AUDIO)
+    url         : String (Supabase Storage URL)
+    fileName    : String (original file name)
+    fileSize    : Long (bytes)
+    createdAt   : Timestamp
+
+8.3 REVIEW OPERATIONS
+
+  Create Review:
+    Endpoint: POST /api/reviews
+    Auth: CUSTOMER or ADMIN
+    Validation:
+      1. User has purchased + received the product
+      2. User has not already reviewed this product
+      3. Rating is between 1 and 5
+      4. Comment length ≤ 2000 characters
+      5. Media URLs are valid Supabase Storage URLs
+      6. Media files are within size limits
+      7. Media types are IMAGE or AUDIO only
+
+  Update Review:
+    Endpoint: PUT /api/reviews/:reviewId
+    Auth: Review owner only
+    Allowed changes: rating, comment
+    Note: Media cannot be changed after submission (delete + re-create)
+
+  Delete Review:
+    Endpoint: DELETE /api/reviews/:reviewId
+    Auth: Review owner OR ADMIN
+    Side effects:
+      - Delete associated ReviewMedia records
+      - Delete files from Supabase Storage (via StorageService)
+      - Recalculate product average rating
+
+  Admin Delete Review:
+    Endpoint: DELETE /api/admin/reviews/:reviewId
+    Auth: ADMIN only
+    Same side effects as customer delete.
+    Admin cannot edit reviews — only delete.
+
+  Get Product Reviews:
+    Endpoint: GET /api/reviews/product/:productId
+    Auth: Public (no authentication required)
+    Pagination: Page-based (page, size, sort parameters)
+    Default sort: newest first
+    Response includes: review details, reviewer name/initial, media URLs
+
+8.4 AVERAGE RATING CALCULATION
+
+  The product's average rating is stored as a denormalized field on the
+  Product entity (averageRating, reviewCount).
+
+  Recalculation trigger:
+    - After review creation
+    - After review update (rating changed)
+    - After review deletion
+
+  Calculation:
+    averageRating = SUM(all ratings for product) / COUNT(all reviews)
+    Rounded to 1 decimal place.
+    If no reviews exist, averageRating = 0, reviewCount = 0.
+
+================================================================================
+9. PRODUCT MODULE DESIGN
+================================================================================
+
+9.1 PRODUCT ENTITY FIELDS
+
+  id              : UUID
+  name            : String (unique, max 200 chars)
+  slug            : String (unique, auto-generated from name)
+  description     : Text (rich description, max 5000 chars)
+  shortDescription: String (max 300 chars, for cards)
+  price           : BigDecimal (current selling price)
+  compareAtPrice  : BigDecimal (nullable, original/MRP price for strikethrough)
+  stockQuantity   : Integer (current available stock)
+  categoryId      : UUID (foreign key to Category)
+  scentNotes      : String (comma-separated scent descriptors)
+  weight          : String (e.g., "200g", "500g")
+  burnTime        : String (e.g., "40-50 hours")
+  ingredients     : Text (ingredient list)
+  isActive        : Boolean (default true, false hides from storefront)
+  averageRating   : Double (denormalized, default 0)
+  reviewCount     : Integer (denormalized, default 0)
+  createdAt       : Timestamp
+  updatedAt       : Timestamp
+
+  ProductImage:
+    id          : UUID
+    productId   : UUID (foreign key to Product)
+    url         : String (Supabase Storage URL)
+    altText     : String
+    displayOrder: Integer (for image carousel ordering)
+    isPrimary   : Boolean (main product image)
+    createdAt   : Timestamp
+
+9.2 PRODUCT OPERATIONS
+
+  List Products (Public):
+    Endpoint: GET /api/products
+    Query Parameters:
+      - category: UUID (filter by category)
+      - search: String (search in name, description)
+      - minPrice: BigDecimal
+      - maxPrice: BigDecimal
+      - sort: name_asc, name_desc, price_asc, price_desc,
+              newest, rating
+      - page: Integer (0-based)
+      - size: Integer (default 12, max 50)
+    Returns: PagedResponse<ProductResponse> with images
+
+  Get Product Detail (Public):
+    Endpoint: GET /api/products/:slug
+    Returns: ProductDetailResponse including:
+      - All product fields
+      - All product images (ordered)
+      - Category information
+      - Average rating and review count
+      - Availability status
+
+  Admin Create Product:
+    Endpoint: POST /api/admin/products
+    Request: AdminProductRequest (all product fields + image URLs)
+    Images are uploaded to Supabase Storage by admin frontend first.
+    Backend receives the Storage URLs and creates ProductImage records.
+
+  Admin Update Product:
+    Endpoint: PUT /api/admin/products/:id
+    Allows updating any product field including images.
+
+  Admin Delete Product:
+    Endpoint: DELETE /api/admin/products/:id
+    Soft delete: Sets isActive = false.
+    Product remains in database for order history integrity.
+
+================================================================================
+10. COUPON MODULE DESIGN
+================================================================================
+
+10.1 COUPON ENTITY FIELDS
+
+  id              : UUID
+  code            : String (unique, uppercase, max 20 chars)
+  description     : String (admin-facing description)
+  type            : CouponType enum (PERCENTAGE, FIXED_AMOUNT)
+  value           : BigDecimal (percentage value or fixed amount in INR)
+  minimumOrderValue : BigDecimal (min order subtotal to apply)
+  maximumDiscount : BigDecimal (nullable, cap for percentage coupons)
+  usageLimit      : Integer (nullable, max total uses)
+  usageCount      : Integer (current usage count)
+  perUserLimit    : Integer (default 1, max uses per customer)
+  startDate       : Timestamp (nullable, coupon valid from)
+  endDate         : Timestamp (nullable, coupon expires after)
+  status          : CouponStatus enum (ACTIVE, INACTIVE, EXPIRED)
+  createdAt       : Timestamp
+  updatedAt       : Timestamp
+
+  CouponUsage:
+    id          : UUID
+    couponId    : UUID (foreign key to Coupon)
+    userId      : UUID (foreign key to User)
+    orderId     : UUID (foreign key to Order)
+    usedAt      : Timestamp
+
+10.2 COUPON VALIDATION LOGIC
+
+  When a customer applies a coupon at checkout:
+
+  Step 1: Find coupon by code (case-insensitive search)
+  Step 2: Check coupon status = ACTIVE
+  Step 3: Check startDate ≤ now ≤ endDate (if dates are set)
+  Step 4: Check usageCount < usageLimit (if limit is set)
+  Step 5: Check user's usage count < perUserLimit
+  Step 6: Check order subtotal ≥ minimumOrderValue
+  Step 7: Calculate discount:
+           PERCENTAGE: subtotal × (value / 100), capped at maximumDiscount
+           FIXED_AMOUNT: value (cannot exceed subtotal)
+  Step 8: Return validation result with calculated discount
+
+================================================================================
+11. ADDRESS MODULE DESIGN
+================================================================================
+
+  Address Entity:
+    id          : UUID
+    userId      : UUID (foreign key to User)
+    label       : String (e.g., "Home", "Office")
+    fullName    : String (recipient name)
+    phone       : String (recipient phone)
+    addressLine1: String
+    addressLine2: String (nullable)
+    city        : String
+    state       : String
+    pincode     : String (Indian PIN code, 6 digits)
+    isDefault   : Boolean
+    createdAt   : Timestamp
+    updatedAt   : Timestamp
+
+  Business Rules:
+    - Each user can have up to 5 addresses
+    - Exactly one address must be default
+    - When setting a new default, the old default is unset
+    - Addresses used in orders are not deleted (soft reference via
+      snapshot in Order entity — address details are copied to order
+      at placement time)
+    - Pincode validated as 6-digit Indian postal code
+
+================================================================================
+12. NOTIFICATION MODULE DESIGN
+================================================================================
+
+12.1 EMAIL NOTIFICATIONS
+
+  EmailService sends transactional emails for the following events:
+
+  Event                    Template                    Recipients
+  ───────────────────────  ────────────────────────── ───────────────
+  Order Placed             order_placed.html           Customer
+  Payment Confirmed        payment_confirmed.html      Customer
+  UPI Payment Rejected     upi_rejected.html           Customer
+  Order Shipped            order_shipped.html          Customer
+  Order Delivered           order_delivered.html         Customer
+  Order Cancelled          order_cancelled.html        Customer
+
+12.2 EMAIL IMPLEMENTATION
+
+  Technology: Spring Boot Mail with JavaMailSender
+  Templates: Thymeleaf HTML email templates
+  SMTP Provider: Configurable via environment variables
+  Retry Policy: 3 attempts with exponential backoff (1s, 3s, 9s)
+  Async Execution: Email sending runs on a separate thread pool
+  (@Async annotation) to not block API response.
+
+  If email sending fails after all retries, the failure is logged
+  but does not affect the business operation (fire-and-forget pattern).
+
+12.3 EMAIL TEMPLATE DATA
+
+  All email templates receive:
+    - customerName: String
+    - orderId: String (FLM-YYYYMMDD-XXXX format)
+    - orderItems: List of items with name, quantity, price
+    - orderTotal: Currency-formatted total
+    - Additional context-specific fields (tracking ID, remarks, etc.)
+
+================================================================================
+13. MEDIA/STORAGE MODULE DESIGN
+================================================================================
+
+13.1 SUPABASE STORAGE INTEGRATION
+
+  StorageService communicates with Supabase Storage via REST API.
+
+  Base URL: https://<project-ref>.supabase.co/storage/v1
+  Authentication: Service Role Key (server-side only)
+
+  Operations:
+    uploadFile(bucket, path, file)    — Upload file to bucket
+    deleteFile(bucket, path)          — Delete file from bucket
+    getPublicUrl(bucket, path)        — Get public URL
+    getFileMetadata(bucket, path)     — Get file size and type
+
+13.2 STORAGE BUCKET STRUCTURE
+
+  Bucket: flamia-products
+    Purpose: Product images uploaded by admin
+    Access: Public read, authenticated write (admin only)
+    Structure: /products/{productId}/{filename}
+
+  Bucket: flamia-reviews
+    Purpose: Review images and audio uploaded by customers
+    Access: Public read, authenticated write (customers)
+    Structure: /reviews/{reviewId}/{filename}
+
+  Bucket: flamia-payments
+    Purpose: UPI payment screenshots uploaded by customers
+    Access: Private (admin read, customer write)
+    Structure: /payments/{orderId}/{filename}
+
+13.3 MEDIA VALIDATION
+
+  Validation happens in two places:
+
+  Frontend (before upload):
+    - File size check (3MB limit)
+    - File type check (MIME type)
+    - Image preview generation
+    - Audio duration display
+
+  Backend (after upload, before saving reference):
+    - Verify URL belongs to Flamia Supabase project
+    - Verify file exists in Storage
+    - Verify file size via Storage metadata endpoint
+    - Verify MIME type matches allowed types
+    - Reject video MIME types explicitly
+
+================================================================================
+14. EXCEPTION HANDLING STRATEGY
+================================================================================
+
+  GlobalExceptionHandler (@ControllerAdvice) catches all exceptions and
+  returns consistent error responses.
+
+  Exception                     HTTP Status   Message Example
+  ────────────────────────────  ────────────  ────────────────────────────
+  ResourceNotFoundException     404           "Product not found"
+  BadRequestException           400           "Invalid coupon code"
+  UnauthorizedException         401           "Authentication required"
+  ForbiddenException            403           "Access denied"
+  PaymentException              422           "Payment verification failed"
+  CouponException               422           "Coupon has expired"
+  ReviewNotAllowedException     403           "Purchase required to review"
+  MediaValidationException      400           "File exceeds 3MB limit"
+  DuplicateResourceException    409           "Product slug already exists"
+  MethodArgumentNotValid        400           Field validation errors
+  ConstraintViolationException  400           Database constraint violation
+  Exception (generic)           500           "Internal server error"
+
+  Error Response Format:
+  {
+    "success": false,
+    "message": "Validation failed",
+    "errors": [
+      "Price must be greater than 0",
+      "Product name is required"
+    ],
+    "timestamp": "2026-03-15T17:10:00Z",
+    "path": "/api/admin/products"
+  }
+
+================================================================================
+15. CONFIGURATION MANAGEMENT
+================================================================================
+
+  Configuration files:
+
+  application.yml
+    Default configuration for all environments.
+    Contains: server port, JPA settings, logging defaults.
+
+  application-dev.yml
+    Development overrides.
+    Contains: verbose logging, show-sql=true, DDL auto=update.
+
+  application-prod.yml
+    Production overrides.
+    Contains: DDL auto=validate, minimal logging, connection pool tuning.
+
+  Environment Variables (loaded at runtime):
+    DATABASE_URL           — Supabase PostgreSQL connection string
+    SUPABASE_JWT_SECRET    — JWT secret for token validation
+    SUPABASE_URL           — Supabase project URL
+    SUPABASE_SERVICE_KEY   — Supabase service role key (for Storage API)
+    RAZORPAY_KEY_ID        — Razorpay API key
+    RAZORPAY_KEY_SECRET    — Razorpay API secret
+    MAIL_HOST              — SMTP server host
+    MAIL_PORT              — SMTP server port
+    MAIL_USERNAME          — SMTP username
+    MAIL_PASSWORD          — SMTP password
+    MAIL_FROM              — Sender email address
+    FRONTEND_URL           — Frontend URL for CORS and email links
+    SERVER_PORT            — Server port (default 8080)
+
+================================================================================
+16. LOGGING STRATEGY
+================================================================================
+
+  Framework: SLF4J + Logback (Spring Boot default)
+
+  Log Levels by Package:
+    com.flamia                    : INFO (production), DEBUG (development)
+    com.flamia.security           : WARN (production), DEBUG (development)
+    com.flamia.service            : INFO
+    com.flamia.controller         : INFO
+    org.springframework.security  : WARN
+    org.hibernate.SQL             : OFF (production), DEBUG (development)
+
+  Structured Logging Pattern:
+    %d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
+
+  Key Log Events:
+    - User authentication success/failure (WARN on failure)
+    - Order creation (INFO with order ID)
+    - Payment events (INFO with payment ID and status)
+    - External service calls and failures (WARN on failure)
+    - Scheduled task execution (INFO)
+    - Application startup and shutdown (INFO)
+
+  Sensitive Data:
+    - JWT tokens NEVER logged
+    - Phone numbers partially masked in logs (91****1234)
+    - Payment details not logged in full
+
+================================================================================
+END OF DOCUMENT — FLAMIA_BACKEND_SYSTEM_DESIGN.txt
+================================================================================

@@ -1,0 +1,1185 @@
+================================================================================
+FLAMIA — API SPECIFICATION
+REST API Endpoints
+================================================================================
+
+Document Version : 1.0
+Last Updated     : 2026-03-15
+Status           : Production-Ready Specification
+Classification   : Internal Engineering Document
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. API Conventions
+2. Auth Endpoints
+3. Product Endpoints
+4. Category Endpoints
+5. Address Endpoints
+6. Coupon Endpoints
+7. Order Endpoints
+8. Payment Endpoints
+9. Review Endpoints
+10. Admin Product Endpoints
+11. Admin Category Endpoints
+12. Admin Order Endpoints
+13. Admin Coupon Endpoints
+14. Admin Review Endpoints
+15. Admin Dashboard Endpoints
+
+================================================================================
+1. API CONVENTIONS
+================================================================================
+
+  Base URL: https://{backend-domain}/api
+
+  Request Format:
+    Content-Type: application/json
+    Authorization: Bearer <supabase_jwt> (for authenticated endpoints)
+
+  Response Format:
+    Content-Type: application/json
+    All responses follow the ApiResponse wrapper:
+
+    Success:
+    {
+      "success": true,
+      "message": "Description of result",
+      "data": { ... }
+    }
+
+    Error:
+    {
+      "success": false,
+      "message": "Description of error",
+      "errors": ["Specific error 1", "Specific error 2"],
+      "timestamp": "2026-03-15T17:10:00Z",
+      "path": "/api/endpoint"
+    }
+
+  Pagination:
+    Paginated endpoints accept query parameters:
+      page  : Integer (0-based, default: 0)
+      size  : Integer (default: 12, max: 50)
+      sort  : String (field_direction, e.g., "createdAt_desc")
+
+    Paginated response wraps data in PagedResponse:
+    {
+      "success": true,
+      "data": {
+        "content": [ ... ],
+        "page": 0,
+        "size": 12,
+        "totalElements": 48,
+        "totalPages": 4,
+        "last": false
+      }
+    }
+
+  HTTP Status Codes:
+    200 OK                  — Successful GET, PUT
+    201 Created             — Successful POST (resource created)
+    204 No Content          — Successful DELETE
+    400 Bad Request         — Validation errors
+    401 Unauthorized        — Missing or invalid JWT
+    403 Forbidden           — Insufficient permissions
+    404 Not Found           — Resource does not exist
+    409 Conflict            — Duplicate resource
+    422 Unprocessable Entity— Business rule violation
+    429 Too Many Requests   — Rate limit exceeded
+    500 Internal Server Error— Unexpected server error
+
+  Security Legend:
+    🔓 Public     — No authentication required
+    🔒 Customer   — Authenticated user (CUSTOMER or ADMIN role)
+    🔑 Admin      — ADMIN role required
+
+================================================================================
+2. AUTH ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/auth/sync
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer (JWT required)
+  Description: Sync authenticated Supabase user with Flamia backend.
+               Creates user record on first login, returns existing on repeat.
+
+  Request Body:
+    {
+      "supabaseId": "string (required, Supabase Auth UUID)",
+      "phone": "string (required, +91XXXXXXXXXX)",
+      "name": "string (optional, display name)"
+    }
+
+  Response (200 OK):
+    {
+      "success": true,
+      "message": "User synced successfully",
+      "data": {
+        "id": "uuid",
+        "phone": "+91XXXXXXXXXX",
+        "name": "Customer Name",
+        "email": null,
+        "role": "CUSTOMER"
+      }
+    }
+
+  Errors:
+    401 — Invalid or missing JWT
+    400 — supabaseId in request doesn't match JWT sub claim
+
+================================================================================
+3. PRODUCT ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/products
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔓 Public
+  Description: List active products with filtering, sorting, and pagination.
+
+  Query Parameters:
+    category  : UUID (optional, filter by category ID)
+    search    : String (optional, search in product name)
+    minPrice  : Number (optional, minimum price filter)
+    maxPrice  : Number (optional, maximum price filter)
+    inStock   : Boolean (optional, default true, only show in-stock)
+    sort      : String (optional, default "newest")
+                Options: "name_asc", "name_desc", "price_asc",
+                         "price_desc", "newest", "rating"
+    page      : Integer (optional, default 0)
+    size      : Integer (optional, default 12, max 50)
+
+  Response (200 OK):
+    {
+      "success": true,
+      "data": {
+        "content": [
+          {
+            "id": "uuid",
+            "name": "Vanilla Bean Bliss",
+            "slug": "vanilla-bean-bliss",
+            "shortDescription": "A warm, sweet vanilla fragrance...",
+            "price": 1499.00,
+            "compareAtPrice": 1999.00,
+            "stockQuantity": 25,
+            "categoryId": "uuid",
+            "categoryName": "Signature Scents",
+            "primaryImageUrl": "https://...supabase.co/storage/...",
+            "averageRating": 4.5,
+            "reviewCount": 12,
+            "isInStock": true
+          }
+        ],
+        "page": 0,
+        "size": 12,
+        "totalElements": 24,
+        "totalPages": 2,
+        "last": false
+      }
+    }
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/products/:slug
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔓 Public
+  Description: Get detailed product information by URL slug.
+
+  Path Parameters:
+    slug : String (product URL slug)
+
+  Response (200 OK):
+    {
+      "success": true,
+      "data": {
+        "id": "uuid",
+        "name": "Vanilla Bean Bliss",
+        "slug": "vanilla-bean-bliss",
+        "description": "Full product description with details...",
+        "shortDescription": "A warm, sweet vanilla fragrance...",
+        "price": 1499.00,
+        "compareAtPrice": 1999.00,
+        "stockQuantity": 25,
+        "category": {
+          "id": "uuid",
+          "name": "Signature Scents",
+          "slug": "signature-scents"
+        },
+        "scentNotes": "Vanilla, Tonka Bean, Sandalwood",
+        "weight": "200g",
+        "burnTime": "40-50 hours",
+        "ingredients": "Natural soy wax, essential oils, cotton wick",
+        "images": [
+          {
+            "id": "uuid",
+            "url": "https://...supabase.co/storage/...",
+            "altText": "Vanilla Bean Bliss candle front view",
+            "displayOrder": 1,
+            "isPrimary": true
+          },
+          {
+            "id": "uuid",
+            "url": "https://...supabase.co/storage/...",
+            "altText": "Vanilla Bean Bliss candle side view",
+            "displayOrder": 2,
+            "isPrimary": false
+          }
+        ],
+        "averageRating": 4.5,
+        "reviewCount": 12,
+        "isInStock": true,
+        "isActive": true
+      }
+    }
+
+  Errors:
+    404 — Product with given slug not found or inactive
+
+================================================================================
+4. CATEGORY ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/categories
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔓 Public
+  Description: List all product categories ordered by display order.
+
+  Response (200 OK):
+    {
+      "success": true,
+      "data": [
+        {
+          "id": "uuid",
+          "name": "Signature Scents",
+          "slug": "signature-scents",
+          "description": "Our most beloved fragrances",
+          "imageUrl": "https://...supabase.co/storage/...",
+          "productCount": 8
+        }
+      ]
+    }
+
+================================================================================
+5. ADDRESS ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/addresses
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer
+  Description: List current user's delivery addresses.
+
+  Response (200 OK):
+    {
+      "success": true,
+      "data": [
+        {
+          "id": "uuid",
+          "label": "Home",
+          "fullName": "Anjan Kumar",
+          "phone": "+919876543210",
+          "addressLine1": "123, MG Road",
+          "addressLine2": "Near City Mall",
+          "city": "Bangalore",
+          "state": "Karnataka",
+          "pincode": "560001",
+          "isDefault": true
+        }
+      ]
+    }
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/addresses
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer
+  Description: Create a new delivery address (max 5 per user).
+
+  Request Body:
+    {
+      "label": "string (required, e.g., 'Home', 'Office')",
+      "fullName": "string (required, max 100)",
+      "phone": "string (required, +91XXXXXXXXXX)",
+      "addressLine1": "string (required, max 255)",
+      "addressLine2": "string (optional, max 255)",
+      "city": "string (required, max 100)",
+      "state": "string (required, max 100)",
+      "pincode": "string (required, 6 digits)",
+      "isDefault": "boolean (optional, default false)"
+    }
+
+  Response (201 Created):
+    {
+      "success": true,
+      "message": "Address created successfully",
+      "data": { ... address object ... }
+    }
+
+  Errors:
+    400 — Validation errors (invalid pincode, missing fields)
+    422 — Maximum 5 addresses reached
+
+──────────────────────────────────────────────────────────────────────────────
+PUT /api/addresses/:addressId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer (owner only)
+  Description: Update an existing address.
+
+  Request Body: Same as POST (all fields can be updated)
+
+  Response (200 OK):
+    {
+      "success": true,
+      "message": "Address updated successfully",
+      "data": { ... updated address object ... }
+    }
+
+  Errors:
+    403 — Address does not belong to current user
+    404 — Address not found
+
+──────────────────────────────────────────────────────────────────────────────
+DELETE /api/addresses/:addressId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer (owner only)
+  Description: Delete an address.
+
+  Response (204 No Content): Empty body
+
+  Errors:
+    403 — Address does not belong to current user
+    404 — Address not found
+
+──────────────────────────────────────────────────────────────────────────────
+PUT /api/addresses/:addressId/default
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer (owner only)
+  Description: Set address as default (unsets previous default).
+
+  Response (200 OK):
+    {
+      "success": true,
+      "message": "Default address updated"
+    }
+
+================================================================================
+6. COUPON ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/coupons/validate
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer
+  Description: Validate a coupon code and calculate discount.
+
+  Request Body:
+    {
+      "code": "string (required, coupon code)",
+      "orderSubtotal": "number (required, current cart subtotal)"
+    }
+
+  Response (200 OK — valid coupon):
+    {
+      "success": true,
+      "message": "Coupon applied successfully",
+      "data": {
+        "code": "WELCOME20",
+        "type": "PERCENTAGE",
+        "value": 20,
+        "discountAmount": 299.80,
+        "minimumOrderValue": 999.00,
+        "description": "20% off on first order"
+      }
+    }
+
+  Errors:
+    422 — Coupon not found, expired, usage limit reached,
+          minimum order not met, or already used by this user.
+          Error message specifies the exact reason.
+
+================================================================================
+7. ORDER ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/orders
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer
+  Description: Create a new order from cart items.
+
+  Request Body:
+    {
+      "addressId": "uuid (required, delivery address)",
+      "couponCode": "string (optional, validated coupon code)",
+      "items": [
+        {
+          "productId": "uuid (required)",
+          "quantity": "integer (required, min 1)",
+          "unitPrice": "number (required, expected price)"
+        }
+      ],
+      "notes": "string (optional, order notes)"
+    }
+
+  Response (201 Created):
+    {
+      "success": true,
+      "message": "Order placed successfully",
+      "data": {
+        "id": "uuid",
+        "orderNumber": "FLM-20260315-0042",
+        "subtotal": 2998.00,
+        "discount": 299.80,
+        "total": 2698.20,
+        "status": "PLACED",
+        "couponCode": "WELCOME20",
+        "items": [
+          {
+            "productId": "uuid",
+            "productName": "Vanilla Bean Bliss",
+            "productImage": "https://...",
+            "quantity": 2,
+            "unitPrice": 1499.00,
+            "totalPrice": 2998.00
+          }
+        ],
+        "address": {
+          "fullName": "Anjan Kumar",
+          "phone": "+919876543210",
+          "addressLine1": "123, MG Road",
+          "city": "Bangalore",
+          "state": "Karnataka",
+          "pincode": "560001"
+        },
+        "createdAt": "2026-03-15T17:10:00Z"
+      }
+    }
+
+  Errors:
+    400 — Validation errors (missing items, invalid address)
+    403 — Address does not belong to user
+    404 — Product not found or inactive
+    409 — Price mismatch (product price changed since cart was loaded)
+    422 — Insufficient stock, invalid coupon
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/orders
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer
+  Description: List current user's orders (newest first).
+
+  Query Parameters:
+    page : Integer (optional, default 0)
+    size : Integer (optional, default 10)
+
+  Response (200 OK):
+    {
+      "success": true,
+      "data": {
+        "content": [
+          {
+            "id": "uuid",
+            "orderNumber": "FLM-20260315-0042",
+            "total": 2698.20,
+            "status": "CONFIRMED",
+            "itemCount": 2,
+            "createdAt": "2026-03-15T17:10:00Z",
+            "primaryProductImage": "https://..."
+          }
+        ],
+        "page": 0,
+        "size": 10,
+        "totalElements": 5,
+        "totalPages": 1,
+        "last": true
+      }
+    }
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/orders/:orderId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer (owner only)
+  Description: Get detailed order information.
+
+  Response (200 OK):
+    {
+      "success": true,
+      "data": {
+        "id": "uuid",
+        "orderNumber": "FLM-20260315-0042",
+        "subtotal": 2998.00,
+        "discount": 299.80,
+        "total": 2698.20,
+        "status": "SHIPPED",
+        "trackingId": "SHP123456789",
+        "couponCode": "WELCOME20",
+        "items": [
+          {
+            "productId": "uuid",
+            "productName": "Vanilla Bean Bliss",
+            "productImage": "https://...",
+            "quantity": 2,
+            "unitPrice": 1499.00,
+            "totalPrice": 2998.00
+          }
+        ],
+        "address": {
+          "fullName": "Anjan Kumar",
+          "phone": "+919876543210",
+          "addressLine1": "123, MG Road",
+          "addressLine2": "Near City Mall",
+          "city": "Bangalore",
+          "state": "Karnataka",
+          "pincode": "560001"
+        },
+        "payment": {
+          "id": "uuid",
+          "method": "RAZORPAY",
+          "status": "PAID",
+          "amount": 2698.20,
+          "createdAt": "2026-03-15T17:12:00Z"
+        },
+        "createdAt": "2026-03-15T17:10:00Z",
+        "updatedAt": "2026-03-16T10:30:00Z"
+      }
+    }
+
+  Errors:
+    403 — Order does not belong to current user
+    404 — Order not found
+
+================================================================================
+8. PAYMENT ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/payments/razorpay/create-order
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer
+  Description: Create Razorpay order for payment processing.
+
+  Request Body:
+    {
+      "orderId": "uuid (required, Flamia order ID)"
+    }
+
+  Response (200 OK):
+    {
+      "success": true,
+      "data": {
+        "razorpayOrderId": "order_ABC123...",
+        "razorpayKeyId": "rzp_live_...",
+        "amount": 269820,
+        "currency": "INR",
+        "orderId": "uuid",
+        "orderNumber": "FLM-20260315-0042"
+      }
+    }
+
+  Errors:
+    403 — Order does not belong to user
+    404 — Order not found
+    422 — Order already paid, or order cancelled
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/payments/razorpay/verify
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer
+  Description: Verify Razorpay payment signature after checkout.
+
+  Request Body:
+    {
+      "orderId": "uuid (required, Flamia order ID)",
+      "razorpayPaymentId": "string (required, from Razorpay response)",
+      "razorpayOrderId": "string (required, from Razorpay response)",
+      "razorpaySignature": "string (required, from Razorpay response)"
+    }
+
+  Response (200 OK — payment verified):
+    {
+      "success": true,
+      "message": "Payment verified successfully",
+      "data": {
+        "paymentId": "uuid",
+        "orderId": "uuid",
+        "orderNumber": "FLM-20260315-0042",
+        "status": "PAID",
+        "amount": 2698.20
+      }
+    }
+
+  Errors:
+    422 — Signature verification failed (payment rejected)
+    404 — Order not found
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/payments/upi/submit
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer
+  Description: Submit manual UPI payment details (screenshot + UTR).
+
+  Request Body:
+    {
+      "orderId": "uuid (required, Flamia order ID)",
+      "utrNumber": "string (required, max 50 chars)",
+      "screenshotUrl": "string (required, Supabase Storage URL)"
+    }
+
+  Response (200 OK):
+    {
+      "success": true,
+      "message": "UPI payment submitted for verification",
+      "data": {
+        "paymentId": "uuid",
+        "orderId": "uuid",
+        "status": "PENDING",
+        "method": "UPI_MANUAL"
+      }
+    }
+
+  Errors:
+    400 — Invalid screenshot URL or missing UTR
+    403 — Order does not belong to user
+    404 — Order not found
+    422 — Order already paid
+
+================================================================================
+9. REVIEW ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/reviews/product/:productId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔓 Public
+  Description: List reviews for a specific product.
+
+  Query Parameters:
+    page : Integer (optional, default 0)
+    size : Integer (optional, default 10)
+    sort : String (optional, default "newest")
+           Options: "newest", "oldest", "rating_high", "rating_low"
+
+  Response (200 OK):
+    {
+      "success": true,
+      "data": {
+        "content": [
+          {
+            "id": "uuid",
+            "rating": 5,
+            "comment": "Absolutely love this candle! The vanilla...",
+            "reviewerName": "Anjan K.",
+            "media": [
+              {
+                "id": "uuid",
+                "mediaType": "IMAGE",
+                "url": "https://...supabase.co/storage/...",
+                "fileName": "candle-photo.jpg"
+              },
+              {
+                "id": "uuid",
+                "mediaType": "AUDIO",
+                "url": "https://...supabase.co/storage/...",
+                "fileName": "voice-review.mp3"
+              }
+            ],
+            "createdAt": "2026-03-10T14:30:00Z",
+            "isOwn": false
+          }
+        ],
+        "page": 0,
+        "size": 10,
+        "totalElements": 12,
+        "totalPages": 2,
+        "last": false,
+        "averageRating": 4.5,
+        "totalReviews": 12,
+        "ratingDistribution": {
+          "5": 6,
+          "4": 3,
+          "3": 2,
+          "2": 0,
+          "1": 1
+        }
+      }
+    }
+
+  Note: "isOwn" field is true if the current authenticated user
+  wrote the review (allows showing edit/delete buttons).
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/reviews
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer
+  Description: Submit a review for a purchased product.
+
+  Request Body:
+    {
+      "productId": "uuid (required)",
+      "rating": "integer (required, 1-5)",
+      "comment": "string (optional, max 2000 chars)",
+      "media": [
+        {
+          "mediaType": "IMAGE | AUDIO",
+          "url": "string (Supabase Storage URL)",
+          "fileName": "string (original filename)",
+          "fileSize": "long (bytes, max 3145728)"
+        }
+      ]
+    }
+
+  Response (201 Created):
+    {
+      "success": true,
+      "message": "Review submitted successfully",
+      "data": { ... review object ... }
+    }
+
+  Errors:
+    403 — User has not purchased this product (no DELIVERED order)
+    409 — User has already reviewed this product
+    400 — Invalid rating, comment too long, media validation failure
+    400 — File exceeds 3MB, invalid media type, video not allowed
+
+──────────────────────────────────────────────────────────────────────────────
+PUT /api/reviews/:reviewId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer (owner only)
+  Description: Update own review (rating and comment only).
+
+  Request Body:
+    {
+      "rating": "integer (required, 1-5)",
+      "comment": "string (optional, max 2000 chars)"
+    }
+
+  Response (200 OK):
+    {
+      "success": true,
+      "message": "Review updated successfully",
+      "data": { ... updated review object ... }
+    }
+
+  Errors:
+    403 — Review does not belong to current user
+    404 — Review not found
+
+──────────────────────────────────────────────────────────────────────────────
+DELETE /api/reviews/:reviewId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔒 Customer (owner only)
+  Description: Delete own review.
+
+  Response (204 No Content): Empty body
+
+  Errors:
+    403 — Review does not belong to current user
+    404 — Review not found
+
+================================================================================
+10. ADMIN PRODUCT ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/admin/products
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: List all products including inactive ones.
+
+  Query Parameters:
+    page     : Integer (optional, default 0)
+    size     : Integer (optional, default 20)
+    search   : String (optional, search by name)
+    category : UUID (optional, filter by category)
+    active   : Boolean (optional, filter by active status)
+
+  Response (200 OK): Paginated list of all products.
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/admin/products
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Create a new product.
+
+  Request Body:
+    {
+      "name": "string (required, max 200)",
+      "description": "string (optional, max 5000)",
+      "shortDescription": "string (optional, max 300)",
+      "price": "number (required, > 0)",
+      "compareAtPrice": "number (optional, >= price)",
+      "stockQuantity": "integer (required, >= 0)",
+      "categoryId": "uuid (required)",
+      "scentNotes": "string (optional, max 500)",
+      "weight": "string (optional)",
+      "burnTime": "string (optional)",
+      "ingredients": "string (optional)",
+      "isActive": "boolean (optional, default true)",
+      "images": [
+        {
+          "url": "string (required, Supabase Storage URL)",
+          "altText": "string (optional)",
+          "displayOrder": "integer (required)",
+          "isPrimary": "boolean (required)"
+        }
+      ]
+    }
+
+  Response (201 Created):
+    {
+      "success": true,
+      "message": "Product created successfully",
+      "data": { ... complete product object with generated slug ... }
+    }
+
+  Errors:
+    400 — Validation errors
+    404 — Category not found
+    409 — Product name or generated slug already exists
+
+──────────────────────────────────────────────────────────────────────────────
+PUT /api/admin/products/:productId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Update an existing product.
+
+  Request Body: Same as POST (all fields can be updated)
+  Response (200 OK): Updated product object
+
+──────────────────────────────────────────────────────────────────────────────
+DELETE /api/admin/products/:productId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Soft-delete a product (sets isActive = false).
+
+  Response (200 OK):
+    {
+      "success": true,
+      "message": "Product deactivated successfully"
+    }
+
+================================================================================
+11. ADMIN CATEGORY ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/admin/categories
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Create a new product category.
+
+  Request Body:
+    {
+      "name": "string (required, max 100)",
+      "description": "string (optional)",
+      "imageUrl": "string (optional, Supabase Storage URL)",
+      "displayOrder": "integer (optional, default 0)"
+    }
+
+  Response (201 Created): Category object with generated slug.
+
+──────────────────────────────────────────────────────────────────────────────
+PUT /api/admin/categories/:categoryId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Update a category.
+  Request Body: Same as POST
+  Response (200 OK): Updated category object.
+
+──────────────────────────────────────────────────────────────────────────────
+DELETE /api/admin/categories/:categoryId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Delete a category (only if no products are linked).
+
+  Response (204 No Content): Empty body.
+
+  Errors:
+    422 — Category has products linked. Reassign products first.
+
+================================================================================
+12. ADMIN ORDER ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/admin/orders
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: List all orders with optional status filter.
+
+  Query Parameters:
+    status : String (optional, filter by OrderStatus)
+    page   : Integer (optional, default 0)
+    size   : Integer (optional, default 20)
+    sort   : String (optional, default "newest")
+
+  Response (200 OK): Paginated list of all orders with customer phone,
+                     payment method, and status.
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/admin/orders/:orderId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Get detailed order information for admin view.
+
+  Response (200 OK): Complete order object including:
+    - All items with product details
+    - Full delivery address
+    - Payment details (including screenshot URL for UPI)
+    - Customer phone number
+    - Status history timestamps
+
+──────────────────────────────────────────────────────────────────────────────
+PUT /api/admin/orders/:orderId/status
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Update order status following valid state machine transitions.
+
+  Request Body:
+    {
+      "status": "string (required, target status)"
+    }
+
+  Valid Transitions:
+    PLACED → CONFIRMED, CANCELLED
+    CONFIRMED → SHIPPED, CANCELLED
+    SHIPPED → DELIVERED
+
+  Response (200 OK):
+    {
+      "success": true,
+      "message": "Order status updated to SHIPPED",
+      "data": { ... updated order ... }
+    }
+
+  Errors:
+    422 — Invalid status transition (e.g., SHIPPED → CANCELLED)
+    404 — Order not found
+
+──────────────────────────────────────────────────────────────────────────────
+PUT /api/admin/orders/:orderId/tracking
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Add Shiprocket tracking ID to a shipped order.
+
+  Request Body:
+    {
+      "trackingId": "string (required, max 100)"
+    }
+
+  Response (200 OK):
+    {
+      "success": true,
+      "message": "Tracking ID added successfully"
+    }
+
+  Errors:
+    422 — Order status is not SHIPPED or DELIVERED
+    404 — Order not found
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/admin/payments/:paymentId/verify
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Approve or reject a manual UPI payment.
+
+  Request Body:
+    {
+      "approved": "boolean (required)",
+      "remarks": "string (optional, admin remarks)"
+    }
+
+  Response (200 OK):
+    {
+      "success": true,
+      "message": "Payment approved and order confirmed"
+    }
+
+  On approved=true:
+    Payment status → PAID
+    Order status → CONFIRMED
+    Confirmation email sent to customer
+
+  On approved=false:
+    Payment status → FAILED
+    Rejection email sent with admin remarks
+
+  Errors:
+    404 — Payment not found
+    422 — Payment is not PENDING or not UPI_MANUAL method
+
+================================================================================
+13. ADMIN COUPON ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/admin/coupons
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: List all coupons.
+
+  Query Parameters:
+    status : String (optional, ACTIVE/INACTIVE/EXPIRED)
+    page   : Integer (optional, default 0)
+    size   : Integer (optional, default 20)
+
+  Response (200 OK): Paginated list of all coupons.
+
+──────────────────────────────────────────────────────────────────────────────
+POST /api/admin/coupons
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Create a new coupon.
+
+  Request Body:
+    {
+      "code": "string (required, max 20, uppercase)",
+      "description": "string (optional, max 255)",
+      "type": "PERCENTAGE | FIXED_AMOUNT (required)",
+      "value": "number (required, > 0, ≤ 100 for PERCENTAGE)",
+      "minimumOrderValue": "number (optional, default 0)",
+      "maximumDiscount": "number (optional, for PERCENTAGE type)",
+      "usageLimit": "integer (optional, null = unlimited)",
+      "perUserLimit": "integer (optional, default 1)",
+      "startDate": "timestamp (optional)",
+      "endDate": "timestamp (optional)"
+    }
+
+  Response (201 Created): Created coupon object.
+
+  Errors:
+    409 — Coupon code already exists
+
+──────────────────────────────────────────────────────────────────────────────
+PUT /api/admin/coupons/:couponId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Update coupon details.
+  Request Body: Same as POST (all fields can be updated except code)
+  Response (200 OK): Updated coupon object.
+
+──────────────────────────────────────────────────────────────────────────────
+PUT /api/admin/coupons/:couponId/deactivate
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Deactivate a coupon (set status to INACTIVE).
+  Response (200 OK):
+    { "success": true, "message": "Coupon deactivated" }
+
+================================================================================
+14. ADMIN REVIEW ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/admin/reviews
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: List all reviews across all products.
+
+  Query Parameters:
+    page      : Integer (optional, default 0)
+    size      : Integer (optional, default 20)
+    productId : UUID (optional, filter by product)
+    rating    : Integer (optional, filter by rating)
+
+  Response (200 OK): Paginated list of reviews with product name,
+                     customer info, rating, and media indicators.
+
+──────────────────────────────────────────────────────────────────────────────
+DELETE /api/admin/reviews/:reviewId
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Delete any review (admin moderation). Cannot edit.
+
+  Response (204 No Content): Empty body.
+
+  Side Effects:
+    - Review media files deleted from Supabase Storage
+    - Product average rating recalculated
+
+================================================================================
+15. ADMIN DASHBOARD ENDPOINTS
+================================================================================
+
+──────────────────────────────────────────────────────────────────────────────
+GET /api/admin/dashboard
+──────────────────────────────────────────────────────────────────────────────
+
+  Security: 🔑 Admin
+  Description: Get dashboard analytics summary.
+
+  Response (200 OK):
+    {
+      "success": true,
+      "data": {
+        "totalOrders": 156,
+        "ordersByStatus": {
+          "PLACED": 3,
+          "CONFIRMED": 12,
+          "SHIPPED": 8,
+          "DELIVERED": 128,
+          "CANCELLED": 5
+        },
+        "revenueToday": 14970.00,
+        "revenueThisWeek": 89820.00,
+        "revenueThisMonth": 345670.00,
+        "pendingUpiVerifications": 2,
+        "totalCustomers": 89,
+        "totalProducts": 24,
+        "recentOrders": [
+          {
+            "id": "uuid",
+            "orderNumber": "FLM-20260315-0042",
+            "customerPhone": "+919876543210",
+            "total": 2698.20,
+            "status": "PLACED",
+            "paymentMethod": "RAZORPAY",
+            "createdAt": "2026-03-15T17:10:00Z"
+          }
+        ]
+      }
+    }
+
+================================================================================
+END OF DOCUMENT — FLAMIA_API_SPECIFICATION.txt
+================================================================================

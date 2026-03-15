@@ -1,0 +1,737 @@
+================================================================================
+FLAMIA — UI DESIGN SYSTEM
+Cinematic Luxury Visual Language
+================================================================================
+
+Document Version : 1.0
+Last Updated     : 2026-03-15
+Status           : Production-Ready Specification
+Classification   : Internal Engineering Document
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Design Philosophy
+2. Color Palette
+3. Typography
+4. Spacing & Layout System
+5. Motion Design Principles
+6. Component Design Rules
+7. Landing Page Storytelling Structure
+8. Scroll Animation Behavior
+9. Iconography
+10. Imagery Guidelines
+11. Dark Mode Strategy
+12. Accessibility Considerations
+
+================================================================================
+1. DESIGN PHILOSOPHY
+================================================================================
+
+Flamia's visual identity embodies three core principles:
+
+  CINEMATIC
+    Every page feels like a carefully directed scene. Content is revealed
+    through deliberate scroll-driven narratives. The user doesn't just
+    browse — they experience, as if watching a luxury brand film unfold.
+
+  WARM LUXURY
+    The palette draws from candlelight warmth: deep ambers, soft creams,
+    and rich charcoal tones. The design avoids cold minimalism in favor
+    of intimate, sophisticated warmth that invites lingering.
+
+  INTENTIONAL RESTRAINT
+    Premium design is not about excess — it's about precision. Every
+    element exists for a reason. Generous whitespace, restrained
+    animation, and typographic hierarchy replace visual clutter.
+
+  Anti-Patterns (What Flamia is NOT):
+    - NOT flashy neon or tech-startup aesthetic
+    - NOT minimal to the point of being sterile
+    - NOT cluttered with badges, pop-ups, or aggressive CTAs
+    - NOT generic e-commerce (no sidebar filters on landing page)
+    - NOT using default browser fonts or system colors
+
+================================================================================
+2. COLOR PALETTE
+================================================================================
+
+2.1 PRIMARY PALETTE
+
+  Name              Hex        HSL                   Usage
+  ────────────────  ─────────  ────────────────────  ──────────────────────
+  Flame Gold        #C8944A    31, 48%, 54%          Primary accent, CTAs
+  Warm Amber        #D4A85C    37, 58%, 60%          Hover states, highlights
+  Deep Charcoal     #1A1A1A    0, 0%, 10%            Primary text, headers
+  Rich Black        #0D0D0D    0, 0%, 5%             Hero backgrounds
+  Cream             #F5F0E8    38, 38%, 93%          Page backgrounds
+  Ivory White       #FEFCF8    40, 75%, 98%          Card backgrounds
+  Soft Taupe        #B8A99A    26, 17%, 66%          Secondary text
+  Muted Bronze      #8B7355    30, 27%, 44%          Tertiary accents
+
+2.2 SEMANTIC PALETTE
+
+  Name              Hex        Usage
+  ────────────────  ─────────  ──────────────────────────────────────────
+  Success Green     #4A7C59    Payment confirmed, delivery, positive status
+  Warning Amber     #C8944A    Pending status, low stock (same as Flame Gold)
+  Error Rose        #A35D5D    Payment failed, validation errors
+  Info Slate        #5D7A8C    Informational badges, neutral status
+  Disabled Grey     #C4BFB8    Disabled buttons, inactive states
+  Overlay Black     rgba(13, 13, 13, 0.6)   Modal/drawer backdrops
+
+2.3 GRADIENT DEFINITIONS
+
+  Hero Gradient:
+    background: linear-gradient(
+      180deg,
+      rgba(13, 13, 13, 0.0) 0%,
+      rgba(13, 13, 13, 0.3) 40%,
+      rgba(13, 13, 13, 0.85) 100%
+    );
+    Usage: Overlay on hero images for text readability
+
+  Card Shimmer:
+    background: linear-gradient(
+      135deg,
+      rgba(200, 148, 74, 0.05) 0%,
+      rgba(200, 148, 74, 0.0) 50%,
+      rgba(200, 148, 74, 0.05) 100%
+    );
+    Usage: Subtle shimmer effect on product cards
+
+  Section Divider:
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      #C8944A 50%,
+      transparent 100%
+    );
+    Usage: Horizontal rule between landing page sections
+    Height: 1px
+
+2.4 TAILWIND CSS CONFIGURATION
+
+  Extend tailwind.config.js with:
+    colors: {
+      flame: {
+        50:  '#FDF8F0',
+        100: '#F9EDD9',
+        200: '#F0D9B0',
+        300: '#E4C080',
+        400: '#D4A85C',
+        500: '#C8944A',
+        600: '#A97B3D',
+        700: '#8B6430',
+        800: '#6D4E25',
+        900: '#4F381A',
+      },
+      charcoal: {
+        50:  '#F5F5F5',
+        100: '#E0E0E0',
+        200: '#BDBDBD',
+        300: '#9E9E9E',
+        400: '#757575',
+        500: '#4A4A4A',
+        600: '#333333',
+        700: '#262626',
+        800: '#1A1A1A',
+        900: '#0D0D0D',
+      },
+      cream: '#F5F0E8',
+      ivory: '#FEFCF8',
+      taupe: '#B8A99A',
+    }
+
+================================================================================
+3. TYPOGRAPHY
+================================================================================
+
+3.1 FONT FAMILIES
+
+  Primary Display Font:
+    Family: Cormorant Garamond
+    Source: Google Fonts (self-hosted for performance)
+    Weights: 300 (Light), 400 (Regular), 500 (Medium), 600 (SemiBold)
+    Usage: Headings, hero text, product names, brand text
+    Character: Elegant serif with high contrast strokes
+
+  Secondary Body Font:
+    Family: Inter
+    Source: Google Fonts (self-hosted for performance)
+    Weights: 300 (Light), 400 (Regular), 500 (Medium), 600 (SemiBold)
+    Usage: Body text, form labels, buttons, navigation, metadata
+    Character: Clean geometric sans-serif, excellent readability
+
+  Monospace (Admin/Data):
+    Family: JetBrains Mono
+    Source: Google Fonts
+    Weights: 400 (Regular)
+    Usage: Order IDs, coupon codes, tracking numbers, admin tables
+    Character: Technical, precise
+
+3.2 TYPE SCALE
+
+  Name              Font          Size     Weight   Line Height  Letter Spacing
+  ────────────────  ──────────── ──────── ──────── ───────────  ──────────────
+  Display XL        Cormorant    72px     300      1.1          -0.02em
+  Display LG        Cormorant    56px     300      1.15         -0.02em
+  Display MD        Cormorant    44px     400      1.2          -0.01em
+  Heading H1        Cormorant    36px     500      1.25         -0.01em
+  Heading H2        Cormorant    28px     500      1.3          0
+  Heading H3        Cormorant    24px     500      1.35         0
+  Heading H4        Inter        20px     600      1.4          0.01em
+  Body LG           Inter        18px     400      1.6          0
+  Body MD           Inter        16px     400      1.6          0
+  Body SM           Inter        14px     400      1.5          0.01em
+  Caption           Inter        12px     500      1.4          0.02em
+  Overline          Inter        11px     600      1.0          0.15em
+
+  Mobile Adjustments (below 768px):
+    Display XL → 40px
+    Display LG → 32px
+    Display MD → 28px
+    Heading H1 → 26px
+    Heading H2 → 22px
+
+3.3 TYPOGRAPHIC RULES
+
+  Rule 1:  All headings use Cormorant Garamond.
+  Rule 2:  All body/UI text uses Inter.
+  Rule 3:  Hero display text is always LIGHT weight (300), never bold.
+  Rule 4:  Button text is Inter 500 (Medium), UPPERCASE, tracked at 0.1em.
+  Rule 5:  Navigation links are Inter 400, sentence case.
+  Rule 6:  Product prices are Inter 600 (SemiBold).
+  Rule 7:  Sale/compare-at prices use line-through + taupe color.
+  Rule 8:  Never underline links (use color change + subtle opacity shift).
+  Rule 9:  Maximum line length for body text: 65 characters (for readability).
+  Rule 10: Headings never wrap beyond 2 lines on desktop.
+
+================================================================================
+4. SPACING & LAYOUT SYSTEM
+================================================================================
+
+4.1 BASE UNIT
+
+  Base unit: 4px
+  All spacing is a multiple of 4px (Tailwind default scale applies).
+
+4.2 SPACING SCALE
+
+  Token    Value    Usage Example
+  ──────── ──────── ────────────────────────────────────────
+  xs       4px      Inline icon gaps
+  sm       8px      Tight internal padding
+  md       16px     Card internal padding
+  lg       24px     Section internal padding
+  xl       32px     Between page sections
+  2xl      48px     Major section gaps
+  3xl      64px     Landing page section gaps
+  4xl      96px     Hero section vertical padding
+  5xl      128px    Between landing page storytelling blocks
+
+4.3 CONTAINER WIDTHS
+
+  Max Content Width:   1200px (centered, with horizontal padding)
+  Narrow Content:      780px  (for text-heavy sections, policies)
+  Wide Content:        1400px (for admin tables, product grids)
+  Full Bleed:          100vw  (hero sections, parallax images)
+
+4.4 GRID SYSTEM
+
+  Product Grid:
+    Mobile (< 640px):    1 column,  gap: 16px
+    Tablet (640-1023px):  2 columns, gap: 20px
+    Desktop (1024px+):    3 columns, gap: 24px
+    Wide (1280px+):       4 columns, gap: 28px
+
+  Admin Grid:
+    Sidebar: 260px fixed
+    Content: flex-1 (remaining width)
+    Table columns: responsive with horizontal scroll on mobile
+
+================================================================================
+5. MOTION DESIGN PRINCIPLES
+================================================================================
+
+5.1 EASING CURVES
+
+  Name              CSS/Framer Motion Value      Usage
+  ────────────────  ──────────────────────────── ──────────────────────
+  Luxury Ease       [0.25, 0.1, 0.25, 1.0]      Default for all
+  Smooth Decel      [0.0, 0.0, 0.2, 1.0]        Entrance animations
+  Quick Response    [0.4, 0.0, 0.2, 1.0]         Button feedback
+  Gentle Bounce     [0.34, 1.56, 0.64, 1.0]      Playful emphasis
+  Linear            [0.0, 0.0, 1.0, 1.0]         Progress bars only
+
+5.2 DURATION GUIDELINES
+
+  Interaction          Duration     Easing
+  ──────────────────── ──────────── ─────────────────
+  Button hover         200ms        Quick Response
+  Button press         100ms        Quick Response
+  Tooltip appear       150ms        Smooth Decel
+  Dropdown open        250ms        Luxury Ease
+  Modal appear         300ms        Smooth Decel
+  Cart drawer slide    350ms        Luxury Ease
+  Page transition      400ms        Luxury Ease
+  Scroll reveal        600ms        Smooth Decel
+  Hero text reveal     800ms        Luxury Ease
+  Parallax movement    Continuous   Linear (scroll-driven)
+
+5.3 ANIMATION PRINCIPLES
+
+  Principle 1: PURPOSEFUL
+    Every animation communicates something: an element entering,
+    a state change, or spatial relationship. No animation for decoration.
+
+  Principle 2: GRACEFUL
+    Movements should feel organic, never mechanical or robotic.
+    Use easing curves that mimic natural deceleration.
+    Avoid linear motion for UI transitions.
+
+  Principle 3: SUBTLE
+    Animations should enhance, not distract. Maximum element
+    displacement: 40px vertically, 20px horizontally.
+    Maximum scale change: 1.0 → 1.08 (8% growth).
+    Opacity is the primary animation property.
+
+  Principle 4: SEQUENTIAL
+    Related elements animate in sequence, not simultaneously.
+    Stagger delay: 80-120ms between siblings.
+    Creates a "flowing" sensation rather than a "flash" of content.
+
+  Principle 5: RESPONSIVE TO PREFERENCE
+    Respect prefers-reduced-motion: reduce.
+    When reduced motion is preferred:
+    - Replace slide animations with simple fades
+    - Reduce durations by 50%
+    - Disable parallax scrolling
+    - Keep essential state-change animations
+
+================================================================================
+6. COMPONENT DESIGN RULES
+================================================================================
+
+6.1 BUTTONS
+
+  Primary Button:
+    Background: Flame Gold (#C8944A)
+    Text: Ivory White (#FEFCF8), Inter 500, uppercase, tracking 0.1em
+    Padding: 14px 32px
+    Border Radius: 2px (nearly square — luxury aesthetic)
+    Border: none
+    Hover: Background shifts to Warm Amber (#D4A85C), scale 1.02
+    Active: Scale 0.98, slight darken
+    Disabled: Background #C4BFB8, cursor not-allowed
+
+  Secondary Button:
+    Background: transparent
+    Text: Deep Charcoal (#1A1A1A), Inter 500, uppercase
+    Border: 1px solid Deep Charcoal
+    Hover: Background rgba(26, 26, 26, 0.05), border to Flame Gold
+    Active: Scale 0.98
+
+  Ghost Button:
+    Background: transparent
+    Text: Flame Gold (#C8944A), Inter 400, sentence case
+    Border: none
+    Hover: Text underline-offset-4, underline Flame Gold
+    Used for: Secondary actions, "View all", "See more"
+
+  Icon Button:
+    Size: 44px × 44px (minimum touch target)
+    Background: transparent
+    Border: none
+    Hover: Background rgba(200, 148, 74, 0.1)
+    Border Radius: 50%
+
+6.2 CARDS
+
+  Product Card:
+    Background: Ivory White (#FEFCF8)
+    Border: 1px solid rgba(184, 169, 154, 0.2)
+    Border Radius: 4px
+    Shadow: none (default), 0 8px 32px rgba(13, 13, 13, 0.08) (hover)
+    Padding: 0 (image full-bleed at top) + 20px horizontal for content
+    Image Ratio: 4:5 (portrait orientation, product photography style)
+    Hover: Slight lift (translateY -4px), shadow appears, image zooms
+
+  Info Card:
+    Background: Cream (#F5F0E8)
+    Border: none
+    Border Radius: 4px
+    Padding: 32px
+    Used for: Feature highlights on landing page, account info
+
+  Admin Card:
+    Background: White
+    Border: 1px solid #E0E0E0
+    Border Radius: 8px
+    Shadow: 0 1px 3px rgba(0,0,0,0.06)
+    Padding: 24px
+    Admin uses a slightly more utilitarian design language
+
+6.3 INPUTS
+
+  Text Input:
+    Background: Ivory White (#FEFCF8)
+    Border: 1px solid rgba(184, 169, 154, 0.4)
+    Border Radius: 2px
+    Padding: 14px 16px
+    Font: Inter 400, 16px
+    Focus: Border changes to Flame Gold, subtle gold glow
+           (box-shadow: 0 0 0 3px rgba(200, 148, 74, 0.15))
+    Error: Border changes to Error Rose (#A35D5D)
+    Label: Inter 500, 13px, Soft Taupe, uppercase, tracking 0.08em,
+           positioned above input with 8px gap
+
+6.4 BADGES / STATUS PILLS
+
+  Order Status Badges:
+    PLACED:     Background rgba(93, 122, 140, 0.1), text #5D7A8C
+    CONFIRMED:  Background rgba(200, 148, 74, 0.1), text #C8944A
+    SHIPPED:    Background rgba(93, 122, 140, 0.15), text #4A6B7C
+    DELIVERED:  Background rgba(74, 124, 89, 0.1), text #4A7C59
+    CANCELLED:  Background rgba(163, 93, 93, 0.1), text #A35D5D
+
+  Style: Padding 6px 14px, border-radius 99px (pill), Inter 500, 12px,
+         uppercase, tracking 0.06em
+
+6.5 NAVIGATION
+
+  Desktop Navbar:
+    Background: Cream (#F5F0E8) with slight transparency
+    Backdrop: blur(10px) — glassmorphism effect
+    Height: 72px
+    Logo: Left-aligned, Cormorant Garamond 24px, SemiBold
+    Links: Center-aligned, Inter 400, 14px, uppercase, tracking 0.08em
+    Actions: Right-aligned (cart icon with count badge, account icon)
+    Border Bottom: 1px solid rgba(184, 169, 154, 0.15)
+    Sticky: Fixed at top, hides on scroll down, shows on scroll up
+
+  Mobile Navbar:
+    Height: 60px
+    Hamburger menu icon left, logo center, cart icon right
+    Menu slide-in from left (full screen overlay)
+
+6.6 FOOTER
+
+  Background: Deep Charcoal (#1A1A1A)
+  Text Color: Cream (#F5F0E8) for headings, Soft Taupe for body
+  Links: Soft Taupe, hover → Flame Gold
+  Layout: 4-column grid (brand, shop, support, social)
+  Bottom Bar: Copyright text, payment method icons
+  Separator: 1px line in Muted Bronze (#8B7355) at 20% opacity
+
+================================================================================
+7. LANDING PAGE STORYTELLING STRUCTURE
+================================================================================
+
+The landing page is structured as a cinematic narrative in 7 acts:
+
+7.1 ACT 1 — THE HERO (FULL VIEWPORT)
+
+  Visual: Full-screen image or video of a burning Flamia candle in a
+  luxurious setting. Warm, golden light. Shallow depth of field.
+
+  Overlay: Dark gradient from bottom (Hero Gradient from palette).
+
+  Content:
+    - Display XL headline: "Illuminate Your World"
+    - Body LG subtext: "Hand-poured luxury candles crafted from
+      the finest natural wax and rare botanical essences."
+    - Primary CTA Button: "DISCOVER THE COLLECTION"
+    - Secondary Ghost Button: "OUR STORY"
+
+  Animation:
+    - Image: Slow Ken Burns zoom (scale 1.0 → 1.06 over 12 seconds)
+    - Headline: Word-by-word fade-in, staggered 100ms
+    - Subtext: Fade in 400ms after headline completes
+    - CTA: Scale-in from 0.95, 300ms after subtext
+
+  Scroll Indicator:
+    - Small animated chevron or "scroll" text at bottom center
+    - Gentle bounce animation (translateY 0 → 8px → 0, 2s loop)
+
+7.2 ACT 2 — THE BRAND PROMISE (FULL WIDTH)
+
+  Visual: Two-column layout on desktop, stacked on mobile.
+  Left: Atmospheric image of candle-making process
+  Right: Brand story text
+
+  Content:
+    - Overline: "THE FLAMIA DIFFERENCE"
+    - Heading H2: "Where Art Meets Fragrance"
+    - Body text: 2-3 paragraphs about craftsmanship, natural
+      ingredients, and the founder's vision.
+    - Ghost Button: "Learn More About Us"
+
+  Animation:
+    - Image slides in from left (translateX: -60px → 0)
+    - Text fades in with slight upward movement
+    - Staggered reveal: image first, then overline, heading, body, CTA
+
+7.3 ACT 3 — FEATURED COLLECTION (CARD CAROUSEL)
+
+  Visual: Horizontal scrolling section showcasing 4-6 featured products.
+
+  Content:
+    - Overline: "CURATED FOR YOU"
+    - Heading H2: "The Signature Collection"
+    - Product cards in horizontal scroll (snap scrolling)
+    - Each card shows: product image, name, scent notes, price
+
+  Animation:
+    - Section heading reveals on scroll
+    - Cards stagger-reveal from left to right
+    - Cards snap to left edge on swipe (CSS scroll-snap)
+    - Individual card hover: lift + shadow + image zoom
+
+7.4 ACT 4 — THE EXPERIENCE (PARALLAX SECTION)
+
+  Visual: Full-width parallax image of a lifestyle setting with Flamia
+  candles (living room, bathroom, meditation space).
+
+  Content:
+    - Overlaid text centered on image
+    - Display MD: "An Experience, Not Just a Candle"
+    - Body LG: Short evocative tagline about the sensory experience
+
+  Animation:
+    - Background image scrolls at 0.5x speed (parallax)
+    - Text fades in when section reaches center of viewport
+    - Text has slight upward float (translateY: 20px → 0)
+
+7.5 ACT 5 — UNIQUE SELLING POINTS (ICON GRID)
+
+  Visual: 3 or 4 icon cards in a row showcasing brand values.
+
+  Content:
+    Icons + titles + descriptions for:
+    1. "100% Natural Wax" — No synthetic additives or paraffin
+    2. "Hand-Poured" — Each candle individually crafted
+    3. "Rare Botanicals" — Sourced from artisan distillers
+    4. "60+ Hour Burn" — Long-lasting luxury experience
+
+  Animation:
+    - Cards stagger-reveal, 100ms apart
+    - Icon appears first, then title, then description
+    - Subtle hover: icon gently rotates or pulses
+
+7.6 ACT 6 — TESTIMONIALS (CAROUSEL)
+
+  Visual: Clean carousel of customer testimonials on a cream background.
+
+  Content:
+    - Overline: "WHAT OUR CUSTOMERS SAY"
+    - Large quotation mark (Cormorant, Flame Gold, 120px)
+    - Customer quote in Body LG italic
+    - Customer name in Body SM, SemiBold
+    - Star rating (Flame Gold stars)
+    - Navigation dots or arrows
+
+  Animation:
+    - Quote slides in from right on carousel advance
+    - Opacity cross-fade between testimonials
+    - Auto-advance every 5 seconds
+    - Pause on hover or touch
+
+7.7 ACT 7 — NEWSLETTER + FOOTER
+
+  Visual: Section with warm background (slightly darker cream) inviting
+  newsletter signup.
+
+  Content:
+    - Heading H2: "Join the Flamia Circle"
+    - Body MD: "Be the first to know about new collections,
+      exclusive offers, and the stories behind our scents."
+    - Email input + "SUBSCRIBE" button (horizontal on desktop)
+
+  Animation:
+    - Fade in on scroll reveal
+    - Input field highlight animation on focus
+    - Submit button pulse on success
+
+================================================================================
+8. SCROLL ANIMATION BEHAVIOR
+================================================================================
+
+8.1 SCROLL REVEAL SYSTEM
+
+  Implementation: Custom useScrollAnimation hook using IntersectionObserver
+
+  Default Reveal Configuration:
+    threshold: 0.2 (trigger when 20% of element is visible)
+    rootMargin: "0px 0px -50px 0px" (trigger 50px before fully visible)
+    triggerOnce: true (animate only on first intersection)
+
+  Default Reveal Animation:
+    initial:  { opacity: 0, y: 40 }
+    animate:  { opacity: 1, y: 0 }
+    duration: 0.6 seconds
+    ease:     "easeOut" (Smooth Decel curve)
+
+8.2 STAGGER GROUPS
+
+  When multiple elements share a container, they reveal in sequence:
+
+  Configuration:
+    staggerChildren: 0.1 (100ms between siblings)
+    delayChildren:   0.2 (200ms before first child starts)
+
+  Used on:
+    - Product card grids
+    - Feature icon rows
+    - Navigation links on mobile menu
+    - Footer column items
+
+8.3 PARALLAX BEHAVIOR
+
+  Elements with parallax class scroll at different speeds:
+
+  Speed Multipliers:
+    parallax-slow:  0.3x (element moves at 30% of scroll speed)
+    parallax-mid:   0.5x (element moves at 50% of scroll speed)
+    parallax-fast:  0.8x (element moves at 80% of scroll speed)
+
+  Implementation: Framer Motion useScroll + useTransform hooks
+    const { scrollYProgress } = useScroll({ target: ref })
+    const y = useTransform(scrollYProgress, [0, 1], [0, -100])
+
+  Rules:
+    - Parallax applied only to decorative images, never text or UI
+    - Max parallax displacement: 150px
+    - Disabled on mobile (< 768px) for performance
+    - Disabled when prefers-reduced-motion is set
+
+8.4 SCROLL-LINKED NAVBAR
+
+  Behavior:
+    - Visible on load
+    - Hides when scrolling down (translateY: -100%)
+    - Shows when scrolling up (translateY: 0)
+    - At top of page: transparent background
+    - After scrolling 100px: solid Cream background with backdrop blur
+    - Transition: 300ms Luxury Ease
+
+  Implementation:
+    Track scroll direction with useState and onScroll event.
+    Background opacity transitions from 0 to 1 at scroll threshold.
+
+================================================================================
+9. ICONOGRAPHY
+================================================================================
+
+  Icon Library: Lucide React (lightweight, consistent line icons)
+  Style: Line icons, 1.5px stroke width
+  Size Scale:
+    Small:  16px (inline with text)
+    Medium: 20px (buttons, navigation)
+    Large:  24px (feature highlights)
+    XL:     32px (landing page icons)
+
+  Color: Inherits current text color by default.
+  Accent icons (on landing page): Flame Gold (#C8944A)
+
+  Custom Icons (if needed):
+    - Flame/candle icon for brand identity
+    - Crafted in SVG, matching Lucide style
+
+================================================================================
+10. IMAGERY GUIDELINES
+================================================================================
+
+10.1 PRODUCT PHOTOGRAPHY STYLE
+
+  Mood: Warm, intimate, golden-hour lighting
+  Background: Dark moody surfaces (marble, slate) or warm textured
+              backgrounds (linen, wood) — never pure white
+  Lighting: Key light simulating candlelight warmth (2700-3200K)
+  Composition: Product centered or rule-of-thirds
+  Aspect Ratio: 4:5 (portrait) for product cards, 16:9 for hero/banner
+
+10.2 LIFESTYLE PHOTOGRAPHY STYLE
+
+  Mood: Aspirational, cozy, cinematic
+  Settings: Living rooms, bathrooms, bedrooms, meditation spaces
+  Color Grading: Warm tones, slight desaturation, high dynamic range
+  People: Minimal — focus on atmosphere and product integration
+
+10.3 IMAGE OPTIMIZATION
+
+  Format: WebP with JPEG fallback
+  Product Card: 400w × 500h (4:5), quality 80
+  Product Detail: 800w × 1000h (4:5), quality 85
+  Hero Banner: 1920w × 1080h (16:9), quality 85
+  Mobile Hero: 768w × 1024h (3:4), quality 80
+  Thumbnail: 100w × 125h (4:5), quality 70
+  Loading: Low-quality base64 blur placeholder → full image fade-in
+
+================================================================================
+11. DARK MODE STRATEGY
+================================================================================
+
+  Flamia's default experience IS the "dark" hero aesthetic that transitions
+  to warm cream for browsing. A traditional dark mode toggle is NOT included
+  in v1, because the design language already balances dark (hero, footer)
+  with warm light (browsing, checkout).
+
+  If dark mode is added in a future version:
+    Dark Surface:    #121212
+    Dark Card:       #1E1E1E
+    Dark Border:     #2E2E2E
+    Dark Text:       #E8E2DA (warm off-white, not pure white)
+    Accent:          Flame Gold (#C8944A) remains unchanged
+    Adjusted Cream:  #1A1814 (warm dark equivalent)
+
+================================================================================
+12. ACCESSIBILITY CONSIDERATIONS
+================================================================================
+
+  12.1 COLOR CONTRAST
+
+    All text must meet WCAG 2.1 AA contrast requirements:
+      - Normal text: ≥ 4.5:1 contrast ratio
+      - Large text (24px+): ≥ 3:1 contrast ratio
+
+    Pre-verified combinations:
+      Deep Charcoal on Cream:      14.7:1 ✓
+      Deep Charcoal on Ivory:      16.2:1 ✓
+      Soft Taupe on Cream:         3.2:1  ✓ (large text only)
+      Ivory on Deep Charcoal:      14.7:1 ✓
+      Ivory on Rich Black:         18.4:1 ✓
+      Flame Gold on Rich Black:    5.8:1  ✓
+      Flame Gold on Cream:         2.9:1  ✗ (use for decorative only)
+
+  12.2 FOCUS INDICATORS
+
+    All interactive elements have visible focus indicators:
+      Outline: 2px solid Flame Gold, offset 3px
+      Never suppress outline without replacement
+
+  12.3 MOTION ACCESSIBILITY
+
+    @media (prefers-reduced-motion: reduce):
+      All Framer Motion animations disabled or reduced
+      Parallax scrolling replaced with static positioning
+      Carousel auto-play disabled
+      Page transitions reduced to simple opacity fades
+
+  12.4 INTERACTIVE TARGETS
+
+    Minimum touch target size: 44px × 44px (WCAG 2.5.5)
+    Minimum spacing between targets: 8px
+
+  12.5 SEMANTIC HTML
+
+    Proper heading hierarchy (single h1 per page)
+    ARIA labels on icon-only buttons
+    Alt text on all product images
+    Role attributes on custom interactive components
+    Form labels linked to inputs
+
+================================================================================
+END OF DOCUMENT — FLAMIA_UI_DESIGN_SYSTEM.txt
+================================================================================

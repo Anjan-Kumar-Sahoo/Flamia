@@ -1,0 +1,1554 @@
+================================================================================
+FLAMIA — TASK BREAKDOWN
+Engineering-Level Task Decomposition
+================================================================================
+
+Document Version : 1.0
+Last Updated     : 2026-03-15
+Status           : Production-Ready Specification
+Classification   : Internal Engineering Document
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+Phase 1 — Database Setup (Tasks 1.1 – 1.8)
+Phase 2 — Backend Core (Tasks 2.1 – 2.12)
+Phase 3 — Security (Tasks 3.1 – 3.8)
+Phase 4 — Product Module (Tasks 4.1 – 4.9)
+Phase 5 — Order Module (Tasks 5.1 – 5.12)
+Phase 6 — Payment Integration (Tasks 6.1 – 6.8)
+Phase 7 — Review System (Tasks 7.1 – 7.7)
+Phase 8 — Frontend Static UI (Tasks 8.1 – 8.20)
+Phase 9 — API Integration (Tasks 9.1 – 9.14)
+Phase 10 — Deployment (Tasks 10.1 – 10.8)
+
+================================================================================
+PHASE 1 — DATABASE SETUP
+================================================================================
+
+TASK 1.1: Create Supabase Project
+
+  Goal: Provision a Supabase project and configure database access.
+  Required Files: None (Supabase dashboard)
+  Dependencies: Supabase account
+  Completion Criteria:
+    - Supabase project created in appropriate region (Asia)
+    - PostgreSQL connection string obtained
+    - API keys (anon key, service role key) documented
+    - JWT secret copied from project settings
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 1.2: Enable PostgreSQL Extensions
+
+  Goal: Enable required PostgreSQL extensions for search functionality.
+  Required Files: V014__enable_pg_trgm.sql
+  Dependencies: Task 1.1
+  Completion Criteria:
+    - pg_trgm extension enabled (verified via \dx in SQL editor)
+    - uuid-ossp extension verified (comes pre-enabled in Supabase)
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 1.3: Create Core Tables
+
+  Goal: Create users, categories, products, and product_images tables.
+  Required Files:
+    V001__create_users_table.sql
+    V002__create_categories_table.sql
+    V003__create_products_table.sql
+    V004__create_product_images_table.sql
+  Dependencies: Task 1.2
+  Completion Criteria:
+    - All four tables created with columns matching FLAMIA_DATABASE_DESIGN.txt
+    - All constraints (PK, UNIQUE, CHECK, FK) verified
+    - Foreign key from products → categories works
+    - Foreign key from product_images → products with CASCADE works
+    - Test insert/update/delete operations succeed
+    - Constraint violations properly rejected
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 1.4: Create Order & Payment Tables
+
+  Goal: Create addresses, orders, order_items, and payments tables.
+  Required Files:
+    V005__create_addresses_table.sql
+    V006__create_orders_table.sql
+    V007__create_order_items_table.sql
+    V008__create_payments_table.sql
+  Dependencies: Task 1.3 (users table for FK)
+  Completion Criteria:
+    - All four tables created with proper schema
+    - JSONB column on orders table works for address_json
+    - OrderStatus CHECK constraint accepts only valid values
+    - PaymentStatus and PaymentMethod constraints verified
+    - Pincode regex constraint works (6-digit validation)
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 1.5: Create Review Tables
+
+  Goal: Create reviews and review_media tables.
+  Required Files:
+    V009__create_reviews_table.sql
+    V010__create_review_media_table.sql
+  Dependencies: Task 1.3 (users, products for FK)
+  Completion Criteria:
+    - reviews table with UNIQUE(user_id, product_id) constraint
+    - review_media with file_size CHECK constraint (≤ 3MB)
+    - media_type CHECK constraint (IMAGE, AUDIO only)
+    - CASCADE delete from reviews → review_media works
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 1.6: Create Coupon Tables
+
+  Goal: Create coupons and coupon_usages tables.
+  Required Files:
+    V011__create_coupons_table.sql
+    V012__create_coupon_usages_table.sql
+  Dependencies: Task 1.3 (users for FK), Task 1.4 (orders for FK)
+  Completion Criteria:
+    - coupons table with all constraints (type, value, status checks)
+    - PERCENTAGE type value ≤ 100 constraint works
+    - coupon_usages with UNIQUE(coupon_id, order_id)
+    - All foreign keys verified
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 1.7: Create Indexes
+
+  Goal: Create all custom database indexes for query performance.
+  Required Files: V013__create_indexes.sql
+  Dependencies: Tasks 1.3 – 1.6 (all tables)
+  Completion Criteria:
+    - All 20+ indexes created (per FLAMIA_DATABASE_DESIGN.txt Section 6.3)
+    - GIN trigram index on products.name verified
+    - Partial index on orders (status=PLACED) verified
+    - Composite index on coupon_usages (user_id, coupon_id) verified
+    - EXPLAIN ANALYZE confirms index usage on key queries
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 1.8: Create Storage Buckets & Seed Data
+
+  Goal: Create Supabase Storage buckets and seed initial data.
+  Required Files:
+    V015__seed_categories.sql
+    Supabase dashboard configuration for buckets
+  Dependencies: Tasks 1.3 – 1.7
+  Completion Criteria:
+    - flamia-products bucket created (public read)
+    - flamia-reviews bucket created (public read, auth write)
+    - flamia-payments bucket created (private)
+    - RLS policies configured on all buckets
+    - 5 initial categories inserted
+    - File upload to each bucket tested and URL accessible
+
+================================================================================
+PHASE 2 — BACKEND CORE
+================================================================================
+
+TASK 2.1: Initialize Spring Boot Project
+
+  Goal: Create Spring Boot 3 project with all required dependencies.
+  Required Files:
+    pom.xml (Maven) or build.gradle (Gradle)
+    FlamiaApplication.java
+  Dependencies: None
+  Completion Criteria:
+    - Spring Boot 3 project created (Spring Initializr or manual)
+    - Dependencies: Spring Web, Spring Data JPA, Spring Security,
+      Spring Validation, Spring Mail, PostgreSQL Driver, Lombok,
+      jjwt (JWT library), Razorpay Java SDK
+    - Application starts successfully (with security auto-config disabled
+      temporarily)
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.2: Configure Application Properties
+
+  Goal: Set up application configuration for dev and prod profiles.
+  Required Files:
+    src/main/resources/application.yml
+    src/main/resources/application-dev.yml
+    src/main/resources/application-prod.yml
+    .env.example
+  Dependencies: Task 2.1
+  Completion Criteria:
+    - Database connection via DATABASE_URL env variable
+    - JPA settings configured (ddl-auto, dialect, naming strategy)
+    - Server port configurable via SERVER_PORT
+    - Mail configuration via env variables
+    - Dev profile enables SQL logging and ddl-auto=update
+    - Prod profile disables SQL logging and ddl-auto=validate
+    - .env.example lists all required environment variables
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.3: Create Core Entity Classes
+
+  Goal: Create JPA entities for users, categories, products, product_images.
+  Required Files:
+    entity/User.java
+    entity/Category.java
+    entity/Product.java
+    entity/ProductImage.java
+  Dependencies: Task 2.2
+  Completion Criteria:
+    - @Entity annotations with @Table(name = "...") mapping
+    - All columns mapped with proper types and constraints
+    - UUID primary keys with @GeneratedValue(strategy = UUID)
+    - @CreatedDate and @UpdatedDate for timestamps
+    - Relationships mapped: Category ↔ Product, Product ↔ ProductImage
+    - Lombok @Getter, @Setter, @NoArgsConstructor applied
+    - Application starts and Hibernate validates mappings
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.4: Create Transaction Entity Classes
+
+  Goal: Create JPA entities for orders, order_items, payments, addresses.
+  Required Files:
+    entity/Order.java
+    entity/OrderItem.java
+    entity/Payment.java
+    entity/Address.java
+  Dependencies: Task 2.3
+  Completion Criteria:
+    - JSONB column mapped on Order (addressJson) using @JdbcTypeCode
+    - Enum columns mapped with @Enumerated(EnumType.STRING)
+    - All relationships mapped correctly
+    - Order → OrderItem: OneToMany with CASCADE
+    - Order → Payment: OneToOne
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.5: Create Review & Coupon Entity Classes
+
+  Goal: Create JPA entities for reviews, review_media, coupons, coupon_usages.
+  Required Files:
+    entity/Review.java
+    entity/ReviewMedia.java
+    entity/Coupon.java
+    entity/CouponUsage.java
+  Dependencies: Task 2.3
+  Completion Criteria:
+    - Unique constraint on (userId, productId) in Review entity
+    - ReviewMediaType enum mapped
+    - CouponType and CouponStatus enums mapped
+    - All relationships mapped correctly
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.6: Create Enum Classes
+
+  Goal: Create all enum types used across the application.
+  Required Files:
+    enums/UserRole.java
+    enums/OrderStatus.java
+    enums/PaymentStatus.java
+    enums/PaymentMethod.java
+    enums/ReviewMediaType.java
+    enums/CouponType.java
+    enums/CouponStatus.java
+  Dependencies: None
+  Completion Criteria:
+    - All enums defined with correct values
+    - Values match database CHECK constraints exactly
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.7: Create Repository Interfaces
+
+  Goal: Create Spring Data JPA repository interfaces for all entities.
+  Required Files:
+    repository/UserRepository.java
+    repository/ProductRepository.java
+    repository/CategoryRepository.java
+    repository/OrderRepository.java
+    repository/OrderItemRepository.java
+    repository/PaymentRepository.java
+    repository/ReviewRepository.java
+    repository/ReviewMediaRepository.java
+    repository/CouponRepository.java
+    repository/AddressRepository.java
+    repository/CouponUsageRepository.java
+  Dependencies: Tasks 2.3 – 2.5
+  Completion Criteria:
+    - All repositories extend JpaRepository<Entity, UUID>
+    - Custom query methods defined for common lookups:
+      UserRepository: findBySupabaseId, findByPhone
+      ProductRepository: findBySlug, search by name (trigram)
+      OrderRepository: findByUserId (paginated), findByStatusAndCreatedAtBefore
+      ReviewRepository: findByProductId (paginated), findByUserIdAndProductId
+      CouponRepository: findByCodeIgnoreCase
+      AddressRepository: findByUserId
+      CouponUsageRepository: countByCouponIdAndUserId
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.8: Create DTO Classes
+
+  Goal: Create all request and response DTO classes.
+  Required Files:
+    dto/request/*.java (15 request DTOs)
+    dto/response/*.java (12 response DTOs)
+  Dependencies: Task 2.6
+  Completion Criteria:
+    - All request DTOs with Jakarta Bean Validation annotations
+    - All response DTOs with proper field types
+    - ApiResponse<T> generic wrapper class
+    - PagedResponse<T> pagination wrapper
+    - No entity fields directly exposed (DTOs are separate classes)
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.9: Create Mapper Classes
+
+  Goal: Create entity-to-DTO and DTO-to-entity mapping utilities.
+  Required Files:
+    mapper/ProductMapper.java
+    mapper/OrderMapper.java
+    mapper/ReviewMapper.java
+    mapper/CouponMapper.java
+    mapper/AddressMapper.java
+    mapper/UserMapper.java
+    mapper/CategoryMapper.java
+  Dependencies: Tasks 2.3 – 2.8
+  Completion Criteria:
+    - Each mapper has toResponse(Entity) and toEntity(Request) methods
+    - Collections mapped correctly (e.g., product images list)
+    - Null-safe mapping for optional fields
+    - Static methods or Spring @Component beans
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.10: Create Exception Handling
+
+  Goal: Implement global exception handling.
+  Required Files:
+    exception/GlobalExceptionHandler.java
+    exception/ResourceNotFoundException.java
+    exception/BadRequestException.java
+    exception/UnauthorizedException.java
+    exception/ForbiddenException.java
+    exception/PaymentException.java
+    exception/CouponException.java
+    exception/ReviewNotAllowedException.java
+    exception/MediaValidationException.java
+    exception/DuplicateResourceException.java
+  Dependencies: Task 2.8 (ApiResponse class)
+  Completion Criteria:
+    - @ControllerAdvice GlobalExceptionHandler catches all exception types
+    - Each exception maps to correct HTTP status code
+    - Error response format follows ApiResponse structure
+    - MethodArgumentNotValidException handled for validation errors
+    - ConstraintViolationException handled for DB constraints
+    - Generic Exception handler for unexpected errors (500)
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.11: Create Utility Classes
+
+  Goal: Implement shared utility functions.
+  Required Files:
+    util/SlugGenerator.java
+    util/OrderIdGenerator.java
+    util/PriceCalculator.java
+  Dependencies: Task 2.7
+  Completion Criteria:
+    - SlugGenerator: converts "Vanilla Dream Candle" → "vanilla-dream-candle"
+      Handles special characters, unicode, consecutive hyphens
+    - OrderIdGenerator: produces FLM-YYYYMMDD-XXXX format
+      Thread-safe, concurrent-access safe
+    - PriceCalculator: computes subtotal, discount, total
+      Handles both PERCENTAGE and FIXED_AMOUNT coupon types
+      Respects maximumDiscount cap
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 2.12: Create Email & Storage Services
+
+  Goal: Implement email notification and Supabase Storage integration.
+  Required Files:
+    service/EmailService.java
+    service/StorageService.java
+    src/main/resources/templates/email/order_placed.html
+    src/main/resources/templates/email/payment_confirmed.html
+    src/main/resources/templates/email/upi_rejected.html
+    src/main/resources/templates/email/order_shipped.html
+    src/main/resources/templates/email/order_delivered.html
+    src/main/resources/templates/email/order_cancelled.html
+  Dependencies: Tasks 2.1, 2.2
+  Completion Criteria:
+    - EmailService sends HTML emails via JavaMailSender
+    - Thymeleaf templates render order details correctly
+    - @Async annotation for non-blocking email sending
+    - Retry logic (3 attempts, exponential backoff)
+    - StorageService communicates with Supabase Storage REST API
+    - Upload, delete, metadata retrieval operations working
+    - File size and MIME type validation via metadata endpoint
+
+================================================================================
+PHASE 3 — SECURITY
+================================================================================
+
+TASK 3.1: Implement JWT Token Validator
+
+  Goal: Validate Supabase-issued JWT tokens.
+  Required Files:
+    security/JwtTokenValidator.java
+    config/JwtConfig.java
+  Dependencies: Task 2.1 (jjwt dependency)
+  Completion Criteria:
+    - Parses JWT using HMAC-SHA256 with Supabase JWT secret
+    - Validates signature, expiration, issuer, and audience claims
+    - Extracts subject (user ID), phone, and metadata
+    - Throws clear exceptions for each validation failure type
+    - Unit tested with valid token, expired token, tampered token
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 3.2: Implement JWT Authentication Filter
+
+  Goal: Spring Security filter that extracts and validates JWT from requests.
+  Required Files:
+    security/JwtAuthenticationFilter.java
+    security/UserPrincipal.java
+  Dependencies: Tasks 3.1, 2.7 (UserRepository)
+  Completion Criteria:
+    - Extends OncePerRequestFilter
+    - Extracts Bearer token from Authorization header
+    - Skips validation for public endpoint paths
+    - On valid JWT: loads User from DB, sets SecurityContext
+    - On invalid JWT: clears SecurityContext, chain continues (returns 401)
+    - On missing JWT: chain continues without auth (public access)
+    - UserPrincipal implements Authentication with user ID, phone, role
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 3.3: Configure Spring Security
+
+  Goal: Set up Spring Security filter chain with JWT authentication.
+  Required Files:
+    config/SecurityConfig.java
+  Dependencies: Task 3.2
+  Completion Criteria:
+    - CSRF disabled (stateless API)
+    - Session management set to STATELESS
+    - JwtAuthenticationFilter registered before UsernamePasswordAuthFilter
+    - Public endpoints explicitly permitted
+    - /api/admin/** requires ADMIN role
+    - All other /api/** endpoints require authentication
+    - CORS configuration integrated
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 3.4: Configure CORS
+
+  Goal: Allow cross-origin requests from the frontend domain.
+  Required Files:
+    config/CorsConfig.java
+  Dependencies: Task 3.3
+  Completion Criteria:
+    - CORS registry allows frontend URL (from env variable)
+    - Allowed methods: GET, POST, PUT, DELETE, OPTIONS
+    - Authorization header allowed
+    - Credentials allowed
+    - Preflight cache: 3600 seconds
+    - CORS integrated with Spring Security filter chain
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 3.5: Implement Auth Sync Endpoint
+
+  Goal: Create the user synchronization endpoint for post-OTP login.
+  Required Files:
+    controller/AuthController.java
+    service/AuthService.java
+    dto/request/AuthSyncRequest.java
+    dto/response/UserResponse.java
+  Dependencies: Tasks 3.3, 2.7, 2.8, 2.9
+  Completion Criteria:
+    - POST /api/auth/sync creates user if not exists
+    - POST /api/auth/sync returns existing user if exists
+    - Supabase ID from JWT matches request body
+    - Default role set to CUSTOMER
+    - Response includes user ID, phone, name, email, role
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 3.6: Configure Security Headers
+
+  Goal: Add security-related HTTP headers to all responses.
+  Required Files:
+    config/WebConfig.java (or SecurityConfig.java extension)
+  Dependencies: Task 3.3
+  Completion Criteria:
+    - X-Content-Type-Options: nosniff
+    - X-Frame-Options: DENY
+    - Strict-Transport-Security header present
+    - Cache-Control: no-store on authenticated responses
+    - Referrer-Policy configured
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 3.7: Implement Rate Limiting
+
+  Goal: Add rate limiting to prevent abuse of critical endpoints.
+  Required Files:
+    security/RateLimiterFilter.java or an interceptor
+  Dependencies: Task 3.3
+  Completion Criteria:
+    - Order creation limited to 5/hour per user
+    - OTP sync limited to 10/minute per IP
+    - Rate limit exceeded returns 429 with clear message
+    - In-memory implementation (acceptable for free tier)
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 3.8: Security Integration Testing
+
+  Goal: Verify all security configurations work end-to-end.
+  Required Files: Test classes or manual test scripts
+  Dependencies: Tasks 3.1 – 3.7
+  Completion Criteria:
+    - Public GET /api/products returns 200 without JWT
+    - POST /api/orders returns 401 without JWT
+    - POST /api/orders returns 200 with valid customer JWT
+    - GET /api/admin/orders returns 403 with customer JWT
+    - GET /api/admin/orders returns 200 with admin JWT
+    - Invalid JWT returns 401 with clear error message
+    - CORS preflight OPTIONS request returns 200 with proper headers
+    - Rate limiting triggers 429 after exceeding limit
+
+================================================================================
+PHASE 4 — PRODUCT MODULE
+================================================================================
+
+TASK 4.1: Implement Category Service
+
+  Goal: Business logic for category operations.
+  Required Files:
+    service/CategoryService.java
+  Dependencies: Task 2.7 (CategoryRepository)
+  Completion Criteria:
+    - List all categories ordered by displayOrder
+    - Get category by ID
+    - Create category with slug auto-generation
+    - Update category
+    - Delete category (only if no products linked)
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 4.2: Implement Category Controllers
+
+  Goal: REST endpoints for category operations.
+  Required Files:
+    controller/CategoryController.java
+    controller/AdminCategoryController.java
+  Dependencies: Task 4.1
+  Completion Criteria:
+    - GET /api/categories — public, returns all categories
+    - POST /api/admin/categories — admin, creates category
+    - PUT /api/admin/categories/:id — admin, updates category
+    - DELETE /api/admin/categories/:id — admin, deletes category
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 4.3: Implement Product Service — Listing
+
+  Goal: Product list with filtering, sorting, search, and pagination.
+  Required Files:
+    service/ProductService.java (listing methods)
+  Dependencies: Tasks 2.7 (ProductRepository), 4.1
+  Completion Criteria:
+    - List products with pagination (page, size)
+    - Filter by category ID
+    - Filter by price range (minPrice, maxPrice)
+    - Filter by availability (in-stock only)
+    - Sort by: name (asc/desc), price (asc/desc), newest, rating
+    - Search by name using ILIKE or pg_trgm similarity
+    - Only active products returned
+    - Product images included in response
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 4.4: Implement Product Service — Detail
+
+  Goal: Get product detail by slug with all related data.
+  Required Files:
+    service/ProductService.java (detail methods)
+  Dependencies: Task 4.3
+  Completion Criteria:
+    - Fetch product by slug (URL-friendly)
+    - Include all product images ordered by displayOrder
+    - Include category information
+    - Include average rating and review count
+    - Return 404 if product not found or inactive
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 4.5: Implement Product Controller (Public)
+
+  Goal: Public REST endpoints for product browsing.
+  Required Files:
+    controller/ProductController.java
+  Dependencies: Tasks 4.3, 4.4
+  Completion Criteria:
+    - GET /api/products — list with query params for filter/sort/page
+    - GET /api/products/:slug — product detail
+    - Pagination metadata in response (page, size, totalElements, totalPages)
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 4.6: Implement Admin Product Service
+
+  Goal: Admin CRUD operations for products.
+  Required Files:
+    service/ProductService.java (admin methods)
+  Dependencies: Task 4.3
+  Completion Criteria:
+    - Create product with images (receives Supabase Storage URLs)
+    - Update product (any field including images)
+    - Soft delete product (set isActive = false)
+    - Slug auto-generation with uniqueness check
+    - Product validation (price > 0, required fields)
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 4.7: Implement Admin Product Controller
+
+  Goal: Admin REST endpoints for product management.
+  Required Files:
+    controller/AdminProductController.java
+  Dependencies: Task 4.6
+  Completion Criteria:
+    - GET /api/admin/products — list all products (including inactive)
+    - POST /api/admin/products — create new product
+    - PUT /api/admin/products/:id — update product
+    - DELETE /api/admin/products/:id — soft delete product
+    - Request validation via @Valid
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 4.8: Implement Product Search
+
+  Goal: Full-text search for products by name.
+  Required Files:
+    repository/ProductRepository.java (search query)
+  Dependencies: Task 1.7 (trigram index)
+  Completion Criteria:
+    - Search endpoint finds products by partial name match
+    - Case-insensitive search
+    - pg_trgm similarity used for fuzzy matching
+    - Results ordered by relevance (similarity score)
+
+────────────────────────────────────────────────────────────────────────────────
+
+TASK 4.9: Product Module Integration Testing
+
+  Goal: Verify all product endpoints work correctly.
+  Required Files: Test classes or manual test scripts
+  Dependencies: Tasks 4.1 – 4.8
+  Completion Criteria:
+    - Product list returns paginated results with images
+    - Search finds products by partial name
+    - Filters (category, price range) narrow results correctly
+    - Sorting works for all sort options
+    - Product detail returns complete data for valid slug
+    - 404 returned for non-existent slug
+    - Admin create/update/delete works
+    - Soft-deleted products hidden from public API
+
+================================================================================
+PHASE 5 — ORDER MODULE
+================================================================================
+
+TASK 5.1: Implement Address Service
+
+  Goal: CRUD operations for customer delivery addresses.
+  Required Files: service/AddressService.java
+  Dependencies: Task 2.7
+  Completion Criteria:
+    - List addresses by user ID
+    - Create address (max 5 per user limit enforced)
+    - Update address
+    - Delete address
+    - Set default address (unsets previous default)
+    - Pincode validation (6-digit Indian PIN)
+
+TASK 5.2: Implement Address Controller
+
+  Goal: REST endpoints for address management.
+  Required Files:
+    controller/AddressController.java
+  Dependencies: Task 5.1
+  Completion Criteria:
+    - GET /api/addresses — list user's addresses
+    - POST /api/addresses — create address
+    - PUT /api/addresses/:id — update address (ownership verified)
+    - DELETE /api/addresses/:id — delete address (ownership verified)
+    - PUT /api/addresses/:id/default — set as default
+
+TASK 5.3: Implement Coupon Service
+
+  Goal: Coupon validation logic.
+  Required Files: service/CouponService.java
+  Dependencies: Task 2.7
+  Completion Criteria:
+    - Validate coupon by code (case-insensitive)
+    - Check status ACTIVE
+    - Check date range (start/end)
+    - Check total usage limit
+    - Check per-user usage limit
+    - Check minimum order value
+    - Calculate discount (PERCENTAGE with cap, FIXED_AMOUNT)
+    - Record coupon usage on order placement
+    - Reverse usage on order cancellation
+
+TASK 5.4: Implement Coupon Controller
+
+  Goal: Customer coupon validation and admin management endpoints.
+  Required Files:
+    controller/CouponController.java
+    controller/AdminCouponController.java
+  Dependencies: Task 5.3
+  Completion Criteria:
+    - POST /api/coupons/validate — validate and calculate discount
+    - POST /api/admin/coupons — create coupon
+    - PUT /api/admin/coupons/:id — update coupon
+    - PUT /api/admin/coupons/:id/deactivate — deactivate coupon
+    - GET /api/admin/coupons — list all coupons
+
+TASK 5.5: Implement Order ID Generator
+
+  Goal: Generate unique order IDs in FLM-YYYYMMDD-XXXX format.
+  Required Files: util/OrderIdGenerator.java
+  Dependencies: Task 2.7 (OrderRepository)
+  Completion Criteria:
+    - Generates FLM-YYYYMMDD-XXXX format
+    - Queries max counter for current date
+    - Increments atomically (thread-safe)
+    - Tested under concurrent access
+
+TASK 5.6: Implement Order Service — Creation
+
+  Goal: Order creation with full validation and stock management.
+  Required Files: service/OrderService.java (creation methods)
+  Dependencies: Tasks 5.1, 5.3, 5.5, 4.3
+  Completion Criteria:
+    - Validate address belongs to user
+    - Validate all products active and in stock
+    - Validate current prices match request prices
+    - Apply coupon if provided (via CouponService)
+    - Calculate subtotal, discount, total
+    - Generate order ID
+    - Snapshot address as JSONB
+    - Snapshot product names and images in order items
+    - Decrement product stock
+    - Record coupon usage
+    - All within single @Transactional boundary
+    - Return complete order details
+
+TASK 5.7: Implement Order Service — Queries
+
+  Goal: Order listing and detail for customers.
+  Required Files: service/OrderService.java (query methods)
+  Dependencies: Task 5.6
+  Completion Criteria:
+    - List orders by user ID with pagination (newest first)
+    - Get order detail by ID (with items, payment, address)
+    - Ownership verification (customer can only see own orders)
+
+TASK 5.8: Implement Order Controller (Customer)
+
+  Goal: Customer-facing order endpoints.
+  Required Files: controller/OrderController.java
+  Dependencies: Tasks 5.6, 5.7
+  Completion Criteria:
+    - POST /api/orders — create order
+    - GET /api/orders — list user's orders (paginated)
+    - GET /api/orders/:orderId — order detail (ownership verified)
+
+TASK 5.9: Implement Order Service — Admin
+
+  Goal: Admin order management with status transitions.
+  Required Files: service/OrderService.java (admin methods)
+  Dependencies: Task 5.7
+  Completion Criteria:
+    - List all orders with filtering by status
+    - Update order status (validate state machine transitions)
+    - Add tracking ID (requires SHIPPED status)
+    - Cancel order (restore stock, reverse coupon usage)
+    - Trigger email notifications on status changes
+
+TASK 5.10: Implement Admin Order Controller
+
+  Goal: Admin order management endpoints.
+  Required Files: controller/AdminOrderController.java
+  Dependencies: Task 5.9
+  Completion Criteria:
+    - GET /api/admin/orders — list all orders (with status filter)
+    - GET /api/admin/orders/:orderId — order detail
+    - PUT /api/admin/orders/:orderId/status — update status
+    - PUT /api/admin/orders/:orderId/tracking — add tracking ID
+
+TASK 5.11: Implement Order Auto-Cancel Scheduler
+
+  Goal: Automatically cancel orders not paid within 24 hours.
+  Required Files: scheduler/OrderCleanupScheduler.java
+  Dependencies: Task 5.9
+  Completion Criteria:
+    - @Scheduled runs every hour
+    - Finds PLACED orders older than 24 hours with no PAID payment
+    - Cancels each order (restores stock, reverses coupon)
+    - Logs all cancellations
+    - Does not affect orders with PAID payment status
+
+TASK 5.12: Implement Admin Dashboard Service
+
+  Goal: Analytics data for admin dashboard.
+  Required Files:
+    service/AdminDashboardService.java
+    controller/AdminDashboardController.java
+  Dependencies: Tasks 5.7, 2.7
+  Completion Criteria:
+    - GET /api/admin/dashboard returns:
+      - Total orders count
+      - Orders by status breakdown
+      - Revenue today / this week / this month
+      - Pending UPI verifications count
+      - Recent 10 orders
+    - All values computed from actual database records
+
+================================================================================
+PHASE 6 — PAYMENT INTEGRATION
+================================================================================
+
+TASK 6.1: Configure Razorpay SDK
+
+  Goal: Set up Razorpay Java SDK with API keys.
+  Required Files:
+    config/RazorpayConfig.java
+  Dependencies: Task 2.1
+  Completion Criteria:
+    - RazorpayClient bean configured with API key and secret
+    - Keys loaded from environment variables
+    - Client tested with Razorpay test mode
+
+TASK 6.2: Implement Razorpay Service
+
+  Goal: Razorpay order creation and signature verification.
+  Required Files: service/RazorpayService.java
+  Dependencies: Task 6.1
+  Completion Criteria:
+    - createOrder: creates Razorpay order with amount in paise
+    - verifySignature: validates HMAC-SHA256 signature
+    - Unit tested with known valid/invalid signatures
+
+TASK 6.3: Implement Payment Service
+
+  Goal: Payment lifecycle management.
+  Required Files: service/PaymentService.java
+  Dependencies: Tasks 6.2, 5.6
+  Completion Criteria:
+    - Create payment record (PENDING)
+    - Update payment status (PAID, FAILED)
+    - Sync payment status with order status
+    - Handle Razorpay payment completion
+    - Handle UPI manual payment submission
+
+TASK 6.4: Implement Razorpay Payment Endpoints
+
+  Goal: REST endpoints for Razorpay payment flow.
+  Required Files: controller/PaymentController.java (Razorpay methods)
+  Dependencies: Tasks 6.2, 6.3
+  Completion Criteria:
+    - POST /api/payments/razorpay/create-order — create Razorpay order
+    - POST /api/payments/razorpay/verify — verify payment signature
+    - On success: payment → PAID, order → CONFIRMED, email sent
+    - On failure: payment → FAILED, informative error returned
+
+TASK 6.5: Implement UPI Manual Payment Endpoints
+
+  Goal: REST endpoints for manual UPI payment flow.
+  Required Files: controller/PaymentController.java (UPI methods)
+  Dependencies: Task 6.3
+  Completion Criteria:
+    - POST /api/payments/upi/submit — submit screenshot URL + UTR
+    - Validates screenshot URL is from Flamia Supabase bucket
+    - Creates payment record with PENDING status
+    - Order remains in PLACED status
+
+TASK 6.6: Implement Admin UPI Verification
+
+  Goal: Admin endpoint to approve/reject UPI payments.
+  Required Files: controller/AdminOrderController.java (payment methods)
+  Dependencies: Tasks 6.3, 5.9
+  Completion Criteria:
+    - POST /api/admin/payments/:paymentId/verify
+    - Request: { approved: true/false, remarks: "..." }
+    - On approve: payment → PAID, order → CONFIRMED, email sent
+    - On reject: payment → FAILED, email sent with remarks
+    - Admin remarks stored on payment record
+
+TASK 6.7: Implement Payment Email Notifications
+
+  Goal: Send emails on payment events.
+  Required Files: EmailService.java (extend with payment methods)
+  Dependencies: Tasks 6.4, 6.6, 2.12
+  Completion Criteria:
+    - Email sent on Razorpay payment confirmed
+    - Email sent on UPI payment approved
+    - Email sent on UPI payment rejected (includes admin remarks)
+    - Emails contain order details and payment reference
+
+TASK 6.8: Payment Integration Testing
+
+  Goal: Full end-to-end payment testing.
+  Required Files: Test scripts
+  Dependencies: Tasks 6.1 – 6.7
+  Completion Criteria:
+    - Razorpay order created with correct amount
+    - Valid Razorpay signature verification passes
+    - Invalid signature verification fails
+    - UPI submission stores screenshot and UTR
+    - Admin approval updates payment and order correctly
+    - Admin rejection updates payment correctly
+    - Emails sent on all payment events
+    - Edge cases: duplicate payment attempts, already paid order
+
+================================================================================
+PHASE 7 — REVIEW SYSTEM
+================================================================================
+
+TASK 7.1: Implement Review Service — Creation
+
+  Goal: Create review with purchase verification.
+  Required Files: service/ReviewService.java (creation)
+  Dependencies: Tasks 2.7, 5.7
+  Completion Criteria:
+    - Verifies user has a DELIVERED order with the product
+    - Verifies user hasn't already reviewed this product
+    - Validates rating 1-5
+    - Validates comment length ≤ 2000 chars
+    - Validates media URLs (Supabase Storage validation)
+    - Validates file sizes ≤ 3MB
+    - Rejects video media types
+    - Creates review + review_media records
+    - Recalculates product average rating
+
+TASK 7.2: Implement Review Service — Queries
+
+  Goal: Fetch reviews for products and users.
+  Required Files: service/ReviewService.java (queries)
+  Dependencies: Task 7.1
+  Completion Criteria:
+    - List reviews by product ID (paginated, newest first)
+    - Include reviewer name (or initial), rating, media URLs
+    - Public access (no auth required)
+
+TASK 7.3: Implement Review Service — Update & Delete
+
+  Goal: Edit and delete reviews with ownership verification.
+  Required Files: service/ReviewService.java (mutations)
+  Dependencies: Task 7.1
+  Completion Criteria:
+    - Update review: owner only, can change rating and comment
+    - Delete review: owner or admin can delete
+    - On delete: remove review_media records
+    - On delete: call StorageService to delete files from Supabase
+    - On update/delete: recalculate product average rating
+
+TASK 7.4: Implement Review Controller
+
+  Goal: REST endpoints for review operations.
+  Required Files: controller/ReviewController.java
+  Dependencies: Tasks 7.1 – 7.3
+  Completion Criteria:
+    - GET /api/reviews/product/:productId — public, paginated
+    - POST /api/reviews — authenticated, create review
+    - PUT /api/reviews/:id — authenticated, update own review
+    - DELETE /api/reviews/:id — authenticated, delete own review
+
+TASK 7.5: Implement Admin Review Controller
+
+  Goal: Admin review moderation endpoint.
+  Required Files: controller/AdminReviewController.java
+  Dependencies: Task 7.3
+  Completion Criteria:
+    - GET /api/admin/reviews — list all reviews (paginated, filterable)
+    - DELETE /api/admin/reviews/:id — delete any review
+    - No edit capability for admin (by design)
+
+TASK 7.6: Implement Average Rating Recalculation
+
+  Goal: Keep product.averageRating and product.reviewCount in sync.
+  Required Files: service/ReviewService.java or service/ProductService.java
+  Dependencies: Tasks 7.1, 7.3
+  Completion Criteria:
+    - After create: recalculate from all reviews
+    - After update: recalculate from all reviews
+    - After delete: recalculate from all reviews
+    - If no reviews: averageRating = 0, reviewCount = 0
+    - Average rounded to 1 decimal place
+
+TASK 7.7: Review Integration Testing
+
+  Goal: Verify review system works end-to-end.
+  Required Files: Test scripts
+  Dependencies: Tasks 7.1 – 7.6
+  Completion Criteria:
+    - Cannot review without delivered order → 403
+    - Cannot review same product twice → 409
+    - Review with images + audio saves correctly
+    - File > 3MB rejected → 400
+    - Video file rejected → 400
+    - Owner can edit and delete
+    - Admin can delete but not edit
+    - Average rating accurate after all operations
+    - Deleted review's media cleaned from storage
+
+================================================================================
+PHASE 8 — FRONTEND STATIC UI
+================================================================================
+
+TASK 8.1: Initialize Vite + React Project
+
+  Goal: Set up frontend project with all dependencies.
+  Required Files: package.json, vite.config.js, tailwind.config.js,
+                  postcss.config.js, index.css
+  Dependencies: None
+  Completion Criteria:
+    - Vite dev server starts successfully
+    - React, Tailwind CSS, Framer Motion installed
+    - Axios, Zustand, Supabase JS SDK, React Router installed
+    - Path alias @/ configured in vite.config.js
+    - Custom Flamia colors and fonts configured in tailwind.config.js
+
+TASK 8.2: Set Up Design System Foundations
+
+  Goal: Implement global styles, fonts, and Tailwind design tokens.
+  Required Files: index.css, tailwind.config.js, public/fonts/
+  Dependencies: Task 8.1
+  Completion Criteria:
+    - Cormorant Garamond and Inter fonts loaded
+    - CSS custom properties for colors defined
+    - Base typography styles applied
+    - Tailwind theme extended with Flamia palette
+    - Dark mode NOT configured (warm cream is the default aesthetic)
+
+TASK 8.3: Build UI Primitive Components
+
+  Goal: Create reusable atomic UI components.
+  Required Files: components/ui/*.jsx (14 components)
+  Dependencies: Task 8.2
+  Completion Criteria:
+    - Button with variants (primary, secondary, ghost, danger)
+    - Input with label, error state, focus animation
+    - Modal with backdrop, enter/exit animation
+    - Drawer (slide from right) with backdrop
+    - Badge and Skeleton components
+    - Toast notification component
+    - StarRating (display and interactive)
+    - FileUpload with drag-and-drop
+    - All components use Framer Motion for animations
+    - All components follow Flamia design system
+
+TASK 8.4: Build Layout Components
+
+  Goal: Create page structure components.
+  Required Files: components/layout/*.jsx (6 components)
+  Dependencies: Tasks 8.2, 8.3
+  Completion Criteria:
+    - Navbar: responsive, scroll-hide behavior, glassmorphism
+    - Footer: multi-column, dark background
+    - MobileMenu: slide-in overlay
+    - PageTransition: AnimatePresence wrapper
+    - ScrollToTop: resets scroll on route change
+    - MainLayout: combines Navbar + content + Footer
+
+TASK 8.5: Build Shared Components
+
+  Goal: Create composed business components.
+  Required Files: components/shared/*.jsx (12 components)
+  Dependencies: Tasks 8.3, 8.4
+  Completion Criteria:
+    - ProductCard with hover animation and image zoom
+    - ProductGrid with responsive columns
+    - CartItem with quantity controls
+    - OrderCard with status badge
+    - ReviewCard with star rating and media display
+    - ReviewForm with file upload
+    - AddressForm with pincode validation
+    - CouponInput with apply button
+    - All using mock data for rendering
+
+TASK 8.6: Implement Zustand Cart Store
+
+  Goal: Cart state management with localStorage persistence.
+  Required Files: stores/cartStore.js
+  Dependencies: Task 8.1
+  Completion Criteria:
+    - Add, remove, update quantity actions
+    - Computed subtotal and total
+    - localStorage persistence via Zustand middleware
+    - Cart survives page refresh
+
+TASK 8.7: Set Up Routing
+
+  Goal: Configure React Router with all routes.
+  Required Files: App.jsx, config/routes.js
+  Dependencies: Task 8.4
+  Completion Criteria:
+    - All routes defined per FLAMIA_FRONTEND_SYSTEM_DESIGN.txt Section 5
+    - PageTransition wrapping route changes
+    - ScrollToTop on route changes
+    - Code splitting with React.lazy for route components
+    - 404 catch-all route
+
+TASK 8.8: Build Landing Page
+
+  Goal: Implement cinematic landing page with all 7 story sections.
+  Required Files: features/landing/*.jsx (7 section components)
+  Dependencies: Tasks 8.3, 8.4, 8.5
+  Completion Criteria:
+    - Hero with Ken Burns zoom, staggered text, scroll indicator
+    - Brand Promise with two-column layout and scroll reveal
+    - Featured Products carousel with snap scrolling
+    - Parallax image section
+    - USP icon grid with stagger reveal
+    - Testimonials carousel with auto-advance
+    - Newsletter section
+    - All animations smooth on mobile and desktop
+
+TASK 8.9: Build Product Pages
+
+  Goal: Product listing and detail pages.
+  Required Files: features/products/*.jsx
+  Dependencies: Tasks 8.5, 8.7
+  Completion Criteria:
+    - Product list with grid, filters sidebar, sort dropdown
+    - Product detail with image gallery, product info, reviews section
+    - Mock data populating all fields
+    - Responsive layout for both pages
+    - Filter drawer on mobile
+
+TASK 8.10: Build Cart & Checkout Pages
+
+  Goal: Cart view and multi-step checkout flow.
+  Required Files: features/cart/*.jsx, features/checkout/*.jsx
+  Dependencies: Tasks 8.5, 8.6
+  Completion Criteria:
+    - Cart page/drawer with items, quantities, coupon, total
+    - Checkout: Address step (select or create address)
+    - Checkout: Order summary step (review before payment)
+    - Checkout: Payment step (Razorpay button + UPI toggle)
+    - Step indicator showing progress
+
+TASK 8.11: Build Auth Pages
+
+  Goal: Login page with phone input and OTP verification.
+  Required Files: features/auth/*.jsx
+  Dependencies: Task 8.3
+  Completion Criteria:
+    - Split layout (brand image left, form right)
+    - Phone input with +91 prefix
+    - OTP input (6 digit boxes)
+    - Animated transition between phone and OTP stages
+    - Timer countdown for OTP resend
+    - Error states for invalid OTP
+
+TASK 8.12: Build Order Pages
+
+  Goal: Order history and order detail for customers.
+  Required Files: features/orders/*.jsx
+  Dependencies: Tasks 8.5, 8.7
+  Completion Criteria:
+    - Order list with order cards (ID, date, total, status)
+    - Order detail with items, address, payment info, tracking
+    - Status timeline visualization
+    - Mock data for all order statuses
+
+TASK 8.13: Build Account Pages
+
+  Goal: Account profile and address book.
+  Required Files: features/account/*.jsx
+  Dependencies: Tasks 8.5, 8.7
+  Completion Criteria:
+    - Profile section (name, phone, email)
+    - Address book with card list
+    - Add/edit address modal
+    - Delete confirmation modal
+    - Default address indicator
+
+TASK 8.14: Build Admin Dashboard
+
+  Goal: Admin overview page with stats.
+  Required Files: features/admin/AdminDashboard.jsx, AdminLayout.jsx
+  Dependencies: Tasks 8.3, 8.4
+  Completion Criteria:
+    - Admin sidebar navigation
+    - Stats cards (orders, revenue, pending actions)
+    - Recent orders table
+    - AdminLayout wrapping all admin pages
+
+TASK 8.15: Build Admin Product Management
+
+  Goal: Admin product CRUD interface.
+  Required Files: features/admin/AdminProducts.jsx, AdminProductForm.jsx
+  Dependencies: Task 8.14
+  Completion Criteria:
+    - Product table with thumbnail, name, price, stock, status
+    - Create product form with all fields
+    - Edit product form (pre-populated)
+    - Image upload area (drag-and-drop)
+    - Mock data populating tables
+
+TASK 8.16: Build Admin Order Management
+
+  Goal: Admin order list and detail with actions.
+  Required Files: features/admin/AdminOrders.jsx, AdminOrderDetail.jsx
+  Dependencies: Task 8.14
+  Completion Criteria:
+    - Order table with status filter
+    - Order detail with admin actions
+    - Status update dropdown with valid transitions
+    - Tracking ID input field
+    - UPI payment verification panel (screenshot + UTR display)
+
+TASK 8.17: Build Admin Coupon Management
+
+  Goal: Admin coupon CRUD interface.
+  Required Files: features/admin/AdminCoupons.jsx, AdminCouponForm.jsx
+  Dependencies: Task 8.14
+  Completion Criteria:
+    - Coupon table with code, type, value, status
+    - Create coupon form with all fields
+    - Edit coupon form
+    - Deactivate toggle
+
+TASK 8.18: Build Admin Review Moderation
+
+  Goal: Admin review list with delete action.
+  Required Files: features/admin/AdminReviews.jsx
+  Dependencies: Task 8.14
+  Completion Criteria:
+    - Review table with product name, customer, rating, date
+    - Media preview (image thumbnails, audio player)
+    - Delete button with confirmation modal
+    - No edit capability (by design)
+
+TASK 8.19: Build Static Pages
+
+  Goal: About, Contact, Privacy, Terms, Shipping, Refund, 404 pages.
+  Required Files: pages/*.jsx (7 pages)
+  Dependencies: Task 8.4
+  Completion Criteria:
+    - About page with brand story and scroll animations
+    - Contact page with form and business info
+    - Policy pages with structured text content
+    - 404 page with animated candle illustration
+    - All pages responsive
+
+TASK 8.20: Frontend Polish & Testing
+
+  Goal: Final UI polish across all pages.
+  Required Files: All frontend files
+  Dependencies: Tasks 8.1 – 8.19
+  Completion Criteria:
+    - All page transitions smooth
+    - All scroll animations working
+    - No layout shifts or jank
+    - Responsive on mobile (375px), tablet (768px), desktop (1280px)
+    - Loading skeletons shown where data would load
+    - Empty states shown where lists would be empty
+    - Console free of errors/warnings
+
+================================================================================
+PHASE 9 — API INTEGRATION
+================================================================================
+
+TASK 9.1: Configure Axios & Supabase
+
+  Goal: Set up Axios instance and Supabase client.
+  Required Files: lib/axios.js, lib/supabase.js, config/env.js
+  Dependencies: Task 8.1
+  Completion Criteria:
+    - Axios instance with base URL from env variable
+    - Request interceptor adds JWT Authorization header
+    - Response interceptor handles 401 (token refresh)
+    - Supabase client initialized with project URL and anon key
+    - Environment variables loaded from VITE_* variables
+
+TASK 9.2: Implement Auth Store & Login Flow
+
+  Goal: Connect Supabase OTP auth to the frontend.
+  Required Files: stores/authStore.js, hooks/useAuth.js,
+                  features/auth/LoginPage.jsx (update)
+  Dependencies: Tasks 9.1, 8.11
+  Completion Criteria:
+    - OTP send via Supabase SDK
+    - OTP verify via Supabase SDK
+    - Session stored in auth store
+    - POST /api/auth/sync called after verification
+    - User role stored in auth store
+    - Auth state listener for token refresh
+    - Logout clears session
+
+TASK 9.3: Implement Auth Guards
+
+  Goal: Protect routes based on authentication state.
+  Required Files: guards/AuthGuard.jsx, guards/AdminGuard.jsx
+  Dependencies: Task 9.2
+  Completion Criteria:
+    - AuthGuard redirects to /login if not authenticated
+    - AdminGuard redirects to / if not admin
+    - Return URL preserved for post-login redirect
+    - Guards show loading state while checking auth
+
+TASK 9.4: Integrate Products API
+
+  Goal: Replace mock product data with API calls.
+  Required Files: lib/api/productsApi.js, hooks/useProducts.js,
+                  features/products/*.jsx (update)
+  Dependencies: Tasks 9.1, 8.9
+  Completion Criteria:
+    - Product list loads from GET /api/products
+    - Filters, sorting, pagination use query parameters
+    - Product detail loads from GET /api/products/:slug
+    - Loading skeletons shown during fetch
+    - Error states on API failure
+    - Search queries work
+
+TASK 9.5: Integrate Addresses API
+
+  Goal: Connect address CRUD to backend.
+  Required Files: lib/api/addressesApi.js, hooks/useAddresses.js
+  Dependencies: Tasks 9.1, 9.2
+  Completion Criteria:
+    - List user's addresses
+    - Create, update, delete addresses
+    - Set default address
+    - Errors display properly
+
+TASK 9.6: Integrate Coupons API
+
+  Goal: Connect coupon validation to backend.
+  Required Files: lib/api/couponsApi.js
+  Dependencies: Tasks 9.1, 9.2
+  Completion Criteria:
+    - POST /api/coupons/validate with order subtotal
+    - Valid coupon: display discount amount
+    - Invalid coupon: display error reason
+    - Apply/remove coupon affects cart total
+
+TASK 9.7: Integrate Order Creation
+
+  Goal: Connect checkout flow to order creation API.
+  Required Files: lib/api/ordersApi.js, features/checkout/*.jsx (update)
+  Dependencies: Tasks 9.5, 9.6
+  Completion Criteria:
+    - POST /api/orders creates order with cart items, address, coupon
+    - Cart cleared after successful order creation
+    - Order ID returned for payment processing
+    - Validation errors displayed (stock issues, price changes)
+
+TASK 9.8: Integrate Razorpay Checkout
+
+  Goal: Connect Razorpay payment to frontend.
+  Required Files: lib/razorpay.js, features/checkout/RazorpayCheckout.jsx
+  Dependencies: Task 9.7
+  Completion Criteria:
+    - Razorpay Checkout.js script loaded
+    - POST /api/payments/razorpay/create-order called
+    - Razorpay modal opens with correct amount
+    - On success: POST /api/payments/razorpay/verify called
+    - On success: redirect to order confirmation
+    - On failure: display error with retry option
+
+TASK 9.9: Integrate UPI Manual Payment
+
+  Goal: Connect UPI manual payment flow.
+  Required Files: features/checkout/UpiManualPayment.jsx (update),
+                  hooks/useMediaUpload.js
+  Dependencies: Task 9.7
+  Completion Criteria:
+    - Display UPI ID for manual payment
+    - Upload screenshot to Supabase Storage (flamia-payments bucket)
+    - Submit UTR + screenshot URL via POST /api/payments/upi/submit
+    - Display "awaiting verification" status
+    - File upload progress indicator
+
+TASK 9.10: Integrate Orders API
+
+  Goal: Connect order listing and detail to backend.
+  Required Files: lib/api/ordersApi.js, features/orders/*.jsx (update)
+  Dependencies: Tasks 9.2, 8.12
+  Completion Criteria:
+    - Order list loads from GET /api/orders
+    - Order detail loads from GET /api/orders/:orderId
+    - Pagination works
+    - Tracking ID displayed when available
+
+TASK 9.11: Integrate Reviews API
+
+  Goal: Connect review display and submission.
+  Required Files: lib/api/reviewsApi.js, hooks/useReviews.js,
+                  features/reviews/*.jsx (update)
+  Dependencies: Tasks 9.1, 9.2
+  Completion Criteria:
+    - Reviews load on product detail page
+    - Submit review with text + star rating
+    - Upload images/audio to Supabase Storage before submission
+    - File validation (3MB, image/audio types only)
+    - Edit and delete own reviews
+    - Error: "Purchase required" displayed when ineligible
+
+TASK 9.12: Integrate Admin Product Management
+
+  Goal: Connect admin product CRUD to backend.
+  Required Files: lib/api/adminApi.js, features/admin/AdminProducts*.jsx
+  Dependencies: Tasks 9.3, 8.15
+  Completion Criteria:
+    - Product list loads from admin API
+    - Create product: upload images to Supabase Storage, then POST
+    - Edit product: pre-populate form, PUT on save
+    - Delete product: confirmation then DELETE
+    - Image management (add/remove images)
+
+TASK 9.13: Integrate Admin Order Management
+
+  Goal: Connect admin order operations to backend.
+  Required Files: features/admin/AdminOrders*.jsx (update)
+  Dependencies: Tasks 9.3, 8.16
+  Completion Criteria:
+    - Order list loads with status filter
+    - Status update via PUT endpoint
+    - Tracking ID entry and submission
+    - UPI verification panel: display screenshot, approve/reject
+
+TASK 9.14: Integrate Admin Coupons & Reviews
+
+  Goal: Connect remaining admin features.
+  Required Files: features/admin/AdminCoupons*.jsx,
+                  features/admin/AdminReviews.jsx (update)
+  Dependencies: Tasks 9.3, 8.17, 8.18
+  Completion Criteria:
+    - Coupon CRUD via admin API
+    - Review list loads, delete action works via API
+    - Dashboard stats load from admin API
+
+================================================================================
+PHASE 10 — DEPLOYMENT
+================================================================================
+
+TASK 10.1: Prepare Backend for Deployment
+
+  Goal: Configure backend for production deployment on Render.
+  Required Files: Dockerfile or Procfile, application-prod.yml
+  Dependencies: All backend tasks
+  Completion Criteria:
+    - production profile activates correct configuration
+    - Build command produces executable JAR
+    - Health check endpoint available (GET /actuator/health)
+    - All environment variables documented in .env.example
+
+TASK 10.2: Deploy Backend to Render
+
+  Goal: Deploy Spring Boot application on Render free tier.
+  Required Files: render.yaml (optional IaC)
+  Dependencies: Task 10.1
+  Completion Criteria:
+    - Web Service created on Render
+    - GitHub repo connected for auto-deploy
+    - Environment variables configured on Render dashboard
+    - Application starts and /api/products returns data
+    - Backend URL noted for frontend configuration
+
+TASK 10.3: Prepare Frontend for Deployment
+
+  Goal: Configure frontend for Vercel deployment.
+  Required Files: vercel.json (headers, redirects),
+                  .env.production
+  Dependencies: All frontend tasks
+  Completion Criteria:
+    - VITE_API_BASE_URL set to Render backend URL
+    - VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY configured
+    - VITE_RAZORPAY_KEY_ID set to production key
+    - vercel.json configured with security headers and SPA routing
+    - Production build succeeds (npm run build)
+
+TASK 10.4: Deploy Frontend to Vercel
+
+  Goal: Deploy React application on Vercel.
+  Required Files: vercel.json
+  Dependencies: Task 10.3
+  Completion Criteria:
+    - Vercel project created and GitHub repo connected
+    - Environment variables configured on Vercel dashboard
+    - Frontend accessible at Vercel URL
+    - All pages load correctly
+    - API calls reach backend successfully
+
+TASK 10.5: Update CORS for Production
+
+  Goal: Update backend CORS to allow production frontend URL.
+  Required Files: Environment variable update on Render
+  Dependencies: Tasks 10.2, 10.4
+  Completion Criteria:
+    - FRONTEND_URL env variable on Render set to Vercel URL
+    - Backend redeployed with updated variable
+    - CORS headers present on API responses
+    - No CORS errors in browser console
+
+TASK 10.6: Create Admin User & Seed Products
+
+  Goal: Set up admin account and initial product catalog.
+  Required Files: None (Supabase dashboard + admin panel)
+  Dependencies: Tasks 10.4, 10.5
+  Completion Criteria:
+    - Admin phone number registered via OTP login
+    - User role updated to ADMIN in Supabase SQL editor
+    - Admin can log in and access admin panel
+    - Initial product catalog created via admin panel
+    - Product images uploaded to Supabase Storage
+
+TASK 10.7: Production Testing
+
+  Goal: Comprehensive testing on production deployment.
+  Required Files: None (manual testing)
+  Dependencies: Task 10.6
+  Completion Criteria:
+    - Landing page loads with animations
+    - Product browsing, search, filtering works
+    - OTP login works on real phone number
+    - Checkout with Razorpay payment works (production test transaction)
+    - UPI manual flow works
+    - Order appears in customer history
+    - Admin can manage orders, verify UPI
+    - Reviews work on purchased products
+    - Emails received for order lifecycle events
+    - Mobile experience verified on real device
+    - All pages load under 3 seconds
+
+TASK 10.8: Documentation & Monitoring
+
+  Goal: Final documentation and monitoring setup.
+  Required Files: README.md (both repos), monitoring configuration
+  Dependencies: Task 10.7
+  Completion Criteria:
+    - README.md in flamia-backend with setup instructions
+    - README.md in flamia-frontend with setup instructions
+    - All environment variables documented
+    - Render keep-alive ping configured (via cron-job.org)
+    - Error tracking noted (console monitoring initially)
+    - Deployment complete, platform live
+
+================================================================================
+END OF DOCUMENT — FLAMIA_TASK_BREAKDOWN.txt
+================================================================================

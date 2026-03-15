@@ -1,0 +1,783 @@
+================================================================================
+FLAMIA — DEPLOYMENT GUIDE
+Supabase + Render + Vercel
+================================================================================
+
+Document Version : 1.0
+Last Updated     : 2026-03-15
+Status           : Production-Ready Specification
+Classification   : Internal Engineering Document
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Deployment Architecture
+2. Supabase Setup
+3. Spring Boot Deployment on Render
+4. React Deployment on Vercel
+5. Environment Variables Reference
+6. Post-Deployment Configuration
+7. Domain Configuration (Optional)
+8. Monitoring & Maintenance
+9. Troubleshooting Guide
+10. Free Tier Limitations & Workarounds
+
+================================================================================
+1. DEPLOYMENT ARCHITECTURE
+================================================================================
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │                         INTERNET                                    │
+  │                                                                     │
+  │  ┌─────────────────────┐            ┌────────────────────────────┐  │
+  │  │   Vercel CDN         │            │   Render                   │  │
+  │  │   (Frontend)         │    HTTPS   │   (Backend)                │  │
+  │  │                      │ ─────────→ │                            │  │
+  │  │   flamia.vercel.app  │            │   flamia-api.onrender.com  │  │
+  │  │   or custom domain   │            │                            │  │
+  │  └─────────────────────┘            └───────────┬────────────────┘  │
+  │           │                                      │                  │
+  │           │ Supabase Auth                        │ JDBC, REST       │
+  │           ▼                                      ▼                  │
+  │  ┌──────────────────────────────────────────────────────────────┐   │
+  │  │                      SUPABASE                                │   │
+  │  │                                                              │   │
+  │  │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐ │   │
+  │  │  │ Auth         │  │ PostgreSQL   │  │ Storage           │ │   │
+  │  │  │ (Phone OTP)  │  │ (Database)   │  │ (Files)           │ │   │
+  │  │  └──────────────┘  └──────────────┘  └────────────────────┘ │   │
+  │  └──────────────────────────────────────────────────────────────┘   │
+  │                                                                     │
+  │  ┌──────────────────┐  ┌──────────────────┐                        │
+  │  │   Razorpay        │  │   SMTP Server    │                        │
+  │  │   (Payments)      │  │   (Emails)       │                        │
+  │  └──────────────────┘  └──────────────────┘                        │
+  └─────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+2. SUPABASE SETUP
+================================================================================
+
+2.1 PROJECT CREATION
+
+  Step 1: Go to https://supabase.com and create an account
+  Step 2: Click "New Project"
+  Step 3: Configure:
+    Organization:  Select or create organization
+    Project Name:  flamia-production
+    Database Password: Generate a strong password (save securely)
+    Region:        South Asia (Mumbai) or Southeast Asia (Singapore)
+    Pricing Plan:  Free tier
+
+  Step 4: Wait for project provisioning (approximately 2 minutes)
+
+2.2 COLLECT CONNECTION DETAILS
+
+  After project creation, navigate to Project Settings → API:
+
+  Required values:
+    SUPABASE_URL         : https://<project-ref>.supabase.co
+    SUPABASE_ANON_KEY    : eyJhbG... (public, safe for frontend)
+    SUPABASE_SERVICE_KEY  : eyJhbG... (secret, backend only)
+
+  Navigate to Project Settings → Database:
+    DATABASE_URL: postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+
+  Navigate to Project Settings → API → JWT Settings:
+    SUPABASE_JWT_SECRET  : your-jwt-secret-string
+
+2.3 CONFIGURE AUTHENTICATION
+
+  Navigate to Authentication → Providers:
+
+  Step 1: Ensure "Phone" provider is enabled
+  Step 2: Configure SMS provider:
+    Option A: Twilio (recommended for production)
+      - Create Twilio account
+      - Get Account SID, Auth Token, and phone number
+      - Enter in Supabase Phone Auth settings
+    Option B: Use Supabase built-in (limited free tier)
+
+  Step 3: Configure Auth Settings:
+    Site URL:           https://flamia.vercel.app (or your domain)
+    Redirect URLs:      https://flamia.vercel.app/login
+    JWT Expiry:         3600 (1 hour, default)
+    Minimum password length: Not applicable (OTP only)
+    Enable signup:      true
+
+2.4 RUN DATABASE MIGRATIONS
+
+  Navigate to SQL Editor in Supabase dashboard.
+
+  Execute SQL migration scripts in order:
+    V001__create_users_table.sql
+    V002__create_categories_table.sql
+    V003__create_products_table.sql
+    V004__create_product_images_table.sql
+    V005__create_addresses_table.sql
+    V006__create_orders_table.sql
+    V007__create_order_items_table.sql
+    V008__create_payments_table.sql
+    V009__create_reviews_table.sql
+    V010__create_review_media_table.sql
+    V011__create_coupons_table.sql
+    V012__create_coupon_usages_table.sql
+    V013__create_indexes.sql
+    V014__enable_pg_trgm.sql
+    V015__seed_categories.sql
+
+  Verify: Check Tables section in Supabase dashboard.
+  All 12 tables should appear with correct columns.
+
+2.5 CREATE STORAGE BUCKETS
+
+  Navigate to Storage in Supabase dashboard:
+
+  Bucket 1: flamia-products
+    Click "New Bucket"
+    Name: flamia-products
+    Public: Yes (toggle on)
+    File size limit: 3MB (3145728 bytes)
+    Allowed MIME types: image/jpeg, image/png, image/webp
+
+  Bucket 2: flamia-reviews
+    Name: flamia-reviews
+    Public: Yes
+    File size limit: 3MB
+    Allowed MIME types: image/jpeg, image/png, image/webp,
+                        audio/mpeg, audio/wav, audio/mp4
+
+  Bucket 3: flamia-payments
+    Name: flamia-payments
+    Public: No (toggle off — private)
+    File size limit: 3MB
+    Allowed MIME types: image/jpeg, image/png
+
+2.6 CONFIGURE STORAGE RLS POLICIES
+
+  For each bucket, navigate to Policies:
+
+  flamia-products:
+    SELECT: Allow public access (for all users)
+      USING (true)
+    INSERT: Allow service_role only
+      USING (auth.role() = 'service_role')
+    DELETE: Allow service_role only
+      USING (auth.role() = 'service_role')
+
+  flamia-reviews:
+    SELECT: Allow public access
+      USING (true)
+    INSERT: Allow authenticated users (path must match user ID)
+      USING (auth.role() = 'authenticated')
+      WITH CHECK ((storage.foldername(name))[1] = 'reviews' AND
+                  (storage.foldername(name))[2] = auth.uid()::text)
+    DELETE: Allow owner or service_role
+      USING (auth.role() = 'service_role' OR
+             (storage.foldername(name))[2] = auth.uid()::text)
+
+  flamia-payments:
+    SELECT: Allow service_role only
+      USING (auth.role() = 'service_role')
+    INSERT: Allow authenticated users
+      USING (auth.role() = 'authenticated')
+    DELETE: Allow service_role only
+      USING (auth.role() = 'service_role')
+
+================================================================================
+3. SPRING BOOT DEPLOYMENT ON RENDER
+================================================================================
+
+3.1 PREPARE BACKEND FOR DEPLOYMENT
+
+  Step 1: Ensure application-prod.yml is configured:
+
+    server:
+      port: ${SERVER_PORT:8080}
+
+    spring:
+      datasource:
+        url: ${DATABASE_URL}
+        driver-class-name: org.postgresql.Driver
+      jpa:
+        hibernate:
+          ddl-auto: validate
+        properties:
+          hibernate:
+            dialect: org.hibernate.dialect.PostgreSQLDialect
+        show-sql: false
+      mail:
+        host: ${MAIL_HOST}
+        port: ${MAIL_PORT}
+        username: ${MAIL_USERNAME}
+        password: ${MAIL_PASSWORD}
+        properties:
+          mail.smtp.auth: true
+          mail.smtp.starttls.enable: true
+
+    flamia:
+      supabase:
+        url: ${SUPABASE_URL}
+        jwt-secret: ${SUPABASE_JWT_SECRET}
+        service-key: ${SUPABASE_SERVICE_KEY}
+      razorpay:
+        key-id: ${RAZORPAY_KEY_ID}
+        key-secret: ${RAZORPAY_KEY_SECRET}
+      frontend-url: ${FRONTEND_URL}
+      mail:
+        from: ${MAIL_FROM}
+
+  Step 2: Verify build command:
+    ./mvnw clean package -DskipTests -Pprod
+
+  Step 3: Verify the JAR runs locally:
+    java -jar target/flamia-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
+
+3.2 DEPLOY ON RENDER
+
+  Step 1: Go to https://render.com and create an account
+  Step 2: Connect your GitHub account
+  Step 3: Click "New" → "Web Service"
+  Step 4: Select the flamia-backend repository
+  Step 5: Configure:
+
+    Name:           flamia-api
+    Region:         Singapore (closest to India)
+    Branch:         main
+    Runtime:        Docker (or Java — see below)
+    Build Command:  ./mvnw clean package -DskipTests
+    Start Command:  java -jar target/flamia-*.jar --spring.profiles.active=prod
+    Plan:           Free
+
+  If using Docker instead of native Java:
+    Create a Dockerfile in the repository root:
+
+    FROM eclipse-temurin:17-jre-alpine
+    WORKDIR /app
+    COPY target/flamia-*.jar app.jar
+    EXPOSE 8080
+    ENTRYPOINT ["java", "-jar", "app.jar", "--spring.profiles.active=prod"]
+
+    On Render:
+    Build Command: ./mvnw clean package -DskipTests
+    Dockerfile Path: ./Dockerfile
+
+  Step 6: Add environment variables (see Section 5 for complete list):
+    DATABASE_URL
+    SUPABASE_URL
+    SUPABASE_JWT_SECRET
+    SUPABASE_SERVICE_KEY
+    RAZORPAY_KEY_ID
+    RAZORPAY_KEY_SECRET
+    MAIL_HOST
+    MAIL_PORT
+    MAIL_USERNAME
+    MAIL_PASSWORD
+    MAIL_FROM
+    FRONTEND_URL
+    SERVER_PORT = 8080
+
+  Step 7: Click "Create Web Service"
+  Step 8: Wait for build and deployment (5-10 minutes)
+
+3.3 VERIFY BACKEND DEPLOYMENT
+
+  Step 1: Navigate to https://flamia-api.onrender.com/api/products
+          Should return JSON response (empty list is fine)
+
+  Step 2: Check health (if actuator is enabled):
+          https://flamia-api.onrender.com/actuator/health
+
+  Step 3: Check Render logs for any startup errors
+
+  Expected Behavior:
+    - First request after idle period takes 30-60 seconds (cold start)
+    - Subsequent requests respond within 500ms
+
+================================================================================
+4. REACT DEPLOYMENT ON VERCEL
+================================================================================
+
+4.1 PREPARE FRONTEND FOR DEPLOYMENT
+
+  Step 1: Create .env.production in project root:
+
+    VITE_API_BASE_URL=https://flamia-api.onrender.com/api
+    VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+    VITE_SUPABASE_ANON_KEY=eyJhbG...
+    VITE_RAZORPAY_KEY_ID=rzp_live_...
+
+  Step 2: Create vercel.json in project root:
+
+    {
+      "rewrites": [
+        { "source": "/(.*)", "destination": "/index.html" }
+      ],
+      "headers": [
+        {
+          "source": "/(.*)",
+          "headers": [
+            {
+              "key": "X-Content-Type-Options",
+              "value": "nosniff"
+            },
+            {
+              "key": "X-Frame-Options",
+              "value": "DENY"
+            },
+            {
+              "key": "Referrer-Policy",
+              "value": "strict-origin-when-cross-origin"
+            },
+            {
+              "key": "Content-Security-Policy",
+              "value": "default-src 'self'; script-src 'self' https://checkout.razorpay.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' https://<project-ref>.supabase.co data: blob:; media-src 'self' https://<project-ref>.supabase.co; connect-src 'self' https://flamia-api.onrender.com https://<project-ref>.supabase.co https://api.razorpay.com; frame-src https://api.razorpay.com;"
+            }
+          ]
+        }
+      ]
+    }
+
+  Step 3: Verify production build:
+    npm run build
+    npx serve dist  (test locally)
+
+4.2 DEPLOY ON VERCEL
+
+  Step 1: Go to https://vercel.com and create an account
+  Step 2: Connect your GitHub account
+  Step 3: Click "Add New" → "Project"
+  Step 4: Import the flamia-frontend repository
+  Step 5: Configure:
+
+    Framework Preset:  Vite
+    Root Directory:    ./
+    Build Command:     npm run build
+    Output Directory:  dist
+    Install Command:   npm install
+
+  Step 6: Add environment variables:
+    VITE_API_BASE_URL       = https://flamia-api.onrender.com/api
+    VITE_SUPABASE_URL       = https://<project-ref>.supabase.co
+    VITE_SUPABASE_ANON_KEY  = eyJhbG...
+    VITE_RAZORPAY_KEY_ID    = rzp_live_...
+
+  Step 7: Click "Deploy"
+  Step 8: Wait for build and deployment (2-3 minutes)
+
+4.3 VERIFY FRONTEND DEPLOYMENT
+
+  Step 1: Navigate to https://flamia.vercel.app (or assigned URL)
+  Step 2: Verify:
+    - Landing page loads with animations
+    - No console errors in browser DevTools
+    - API calls reach backend (check Network tab)
+    - Images load from Supabase Storage
+    - Navigation between pages works
+
+================================================================================
+5. ENVIRONMENT VARIABLES REFERENCE
+================================================================================
+
+5.1 BACKEND (RENDER) ENVIRONMENT VARIABLES
+
+  Variable                Value Source              Example
+  ──────────────────────  ─────────────────────── ────────────────────────────
+  DATABASE_URL            Supabase Database        postgresql://postgres.[ref]:
+                          Settings                 [password]@aws-0-[region]
+                                                   .pooler.supabase.com:6543
+                                                   /postgres
+  SUPABASE_URL            Supabase API Settings    https://abcdef.supabase.co
+  SUPABASE_JWT_SECRET     Supabase JWT Settings    your-super-secret-jwt-
+                                                   token-with-at-least-32-chars
+  SUPABASE_SERVICE_KEY    Supabase API Keys        eyJhbGciOiJIUzI1NiIs...
+  RAZORPAY_KEY_ID         Razorpay Dashboard       rzp_live_AbCdEfGhIjKl
+  RAZORPAY_KEY_SECRET     Razorpay Dashboard       AbCdEfGhIjKlMnOpQrStUv
+  MAIL_HOST               SMTP Provider            smtp.gmail.com
+  MAIL_PORT               SMTP Provider            587
+  MAIL_USERNAME           SMTP Provider            flamia.shop@gmail.com
+  MAIL_PASSWORD           SMTP Provider            app-specific-password
+  MAIL_FROM               Business email           orders@flamia.in
+  FRONTEND_URL            Vercel deployment URL     https://flamia.vercel.app
+  SERVER_PORT             Default                  8080
+
+5.2 FRONTEND (VERCEL) ENVIRONMENT VARIABLES
+
+  Variable                  Value Source              Example
+  ────────────────────────  ────────────────────────  ──────────────────────────
+  VITE_API_BASE_URL         Render deployment URL     https://flamia-api
+                                                      .onrender.com/api
+  VITE_SUPABASE_URL         Supabase API Settings     https://abcdef.supabase.co
+  VITE_SUPABASE_ANON_KEY    Supabase API Keys         eyJhbGciOiJIUzI1NiIs...
+  VITE_RAZORPAY_KEY_ID      Razorpay Dashboard        rzp_live_AbCdEfGhIjKl
+
+5.3 SECURITY NOTES ON ENVIRONMENT VARIABLES
+
+  NEVER expose on frontend:
+    ✗ SUPABASE_SERVICE_KEY (allows bypassing RLS)
+    ✗ SUPABASE_JWT_SECRET (allows token forgery)
+    ✗ RAZORPAY_KEY_SECRET (allows payment manipulation)
+    ✗ MAIL_PASSWORD (allows email abuse)
+    ✗ DATABASE_URL (allows direct DB access)
+
+  Safe for frontend (public by design):
+    ✓ VITE_SUPABASE_URL (public project URL)
+    ✓ VITE_SUPABASE_ANON_KEY (restricted by RLS policies)
+    ✓ VITE_RAZORPAY_KEY_ID (public key, used for Checkout.js)
+    ✓ VITE_API_BASE_URL (public API URL)
+
+================================================================================
+6. POST-DEPLOYMENT CONFIGURATION
+================================================================================
+
+6.1 UPDATE CORS
+
+  After frontend is deployed, update FRONTEND_URL on Render:
+    FRONTEND_URL = https://flamia.vercel.app
+
+  Render will automatically redeploy with the new variable.
+
+  Verify: Open browser DevTools console on the frontend.
+  No CORS errors should appear when making API calls.
+
+6.2 CREATE ADMIN USER
+
+  Step 1: Navigate to the deployed frontend
+  Step 2: Go to /login
+  Step 3: Enter the admin phone number and complete OTP verification
+  Step 4: This creates a CUSTOMER user in the database
+
+  Step 5: Go to Supabase Dashboard → SQL Editor
+  Step 6: Run:
+    UPDATE users SET role = 'ADMIN' WHERE phone = '+91XXXXXXXXXX';
+
+  Step 7: Log out and log back in on the frontend
+  Step 8: Navigate to /admin — admin dashboard should load
+
+6.3 UPLOAD INITIAL PRODUCTS
+
+  Step 1: Log in as admin on the frontend
+  Step 2: Navigate to /admin/products
+  Step 3: Create products one by one:
+    - Fill in product details
+    - Upload product images (they go to Supabase Storage)
+    - Set categories, prices, stock quantities
+    - Mark as active
+
+6.4 CONFIGURE RAZORPAY LIVE MODE
+
+  Step 1: Complete KYC on Razorpay dashboard
+  Step 2: Switch from test mode to live mode
+  Step 3: Generate live API keys
+  Step 4: Update RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on Render
+  Step 5: Update VITE_RAZORPAY_KEY_ID on Vercel
+  Step 6: Perform a test transaction with a real small payment
+  Step 7: Verify payment appears in Razorpay dashboard
+  Step 8: Refund the test payment
+
+6.5 CONFIGURE EMAIL (SMTP)
+
+  Option A: Gmail SMTP
+    MAIL_HOST     = smtp.gmail.com
+    MAIL_PORT     = 587
+    MAIL_USERNAME = your-email@gmail.com
+    MAIL_PASSWORD = (App Password, not regular password)
+
+    To generate App Password:
+    1. Enable 2FA on Google Account
+    2. Go to Google Account → Security → App Passwords
+    3. Generate password for "Other (Custom name)" → "Flamia"
+    4. Use the generated 16-character password
+
+  Option B: SendGrid
+    MAIL_HOST     = smtp.sendgrid.net
+    MAIL_PORT     = 587
+    MAIL_USERNAME = apikey
+    MAIL_PASSWORD = (SendGrid API key)
+
+  Option C: Resend
+    MAIL_HOST     = smtp.resend.com
+    MAIL_PORT     = 587
+    MAIL_USERNAME = resend
+    MAIL_PASSWORD = (Resend API key)
+
+  After configuring, test by placing a test order.
+  Verify email received with correct content.
+
+================================================================================
+7. DOMAIN CONFIGURATION (OPTIONAL)
+================================================================================
+
+7.1 CUSTOM DOMAIN FOR FRONTEND (VERCEL)
+
+  Step 1: Go to Vercel → Project Settings → Domains
+  Step 2: Add your domain (e.g., www.flamia.in)
+  Step 3: Add DNS records at your domain registrar:
+    Type  Name   Value
+    A     @      76.76.21.21 (Vercel IP)
+    CNAME www    cname.vercel-dns.com
+
+  Step 4: Wait for DNS propagation (up to 48 hours)
+  Step 5: Verify HTTPS certificate auto-provisioned by Vercel
+
+7.2 CUSTOM DOMAIN FOR BACKEND (RENDER)
+
+  Step 1: Go to Render → Web Service → Settings → Custom Domains
+  Step 2: Add subdomain (e.g., api.flamia.in)
+  Step 3: Add DNS record:
+    Type  Name   Value
+    CNAME api    flamia-api.onrender.com
+
+  Step 4: Wait for DNS propagation
+  Step 5: Update FRONTEND_URL env variable if domain changed
+  Step 6: Update VITE_API_BASE_URL to new domain
+
+7.3 POST-DOMAIN UPDATES
+
+  After custom domain is live:
+  - Update CORS (FRONTEND_URL) on backend
+  - Update Supabase Auth redirect URLs
+  - Update Content-Security-Policy in vercel.json
+  - Update Razorpay webhook URL (if using webhooks)
+  - Redeploy both services
+
+================================================================================
+8. MONITORING & MAINTENANCE
+================================================================================
+
+8.1 RENDER MONITORING
+
+  Render provides:
+    - Deploy logs (build + start output)
+    - Runtime logs (application stdout/stderr)
+    - Basic metrics (CPU, memory usage)
+
+  Access: Render Dashboard → Web Service → Logs
+
+8.2 VERCEL MONITORING
+
+  Vercel provides:
+    - Build logs
+    - Function logs (if using API routes, not applicable for SPA)
+    - Analytics (page views, web vitals — requires upgrade)
+
+  Access: Vercel Dashboard → Project → Deployments
+
+8.3 SUPABASE MONITORING
+
+  Monitor via Supabase Dashboard:
+    - Database → Shows table row counts and size
+    - Auth → Shows user count and recent signups
+    - Storage → Shows bucket usage and bandwidth
+    - Logs → Shows database query logs and auth events
+
+8.4 KEEP-ALIVE FOR RENDER FREE TIER
+
+  Render free tier spins down services after 15 minutes of inactivity.
+  To prevent cold start delays for users:
+
+  Option 1: Use cron-job.org (free)
+    Step 1: Sign up at https://cron-job.org
+    Step 2: Create a new cron job:
+      URL:       https://flamia-api.onrender.com/api/products
+      Schedule:  Every 14 minutes
+      Method:    GET
+    Step 3: This keeps the service warm by making periodic requests
+
+  Option 2: Use UptimeRobot (free)
+    Step 1: Sign up at https://uptimerobot.com
+    Step 2: Add HTTP monitor:
+      URL:     https://flamia-api.onrender.com/api/products
+      Interval: 5 minutes
+
+  Note: Render free tier has 750 hours/month of free usage.
+  Keep-alive pings consume these hours. With one service, 750 hours
+  covers the entire month (744 hours in a 31-day month).
+
+8.5 REGULAR MAINTENANCE TASKS
+
+  Weekly:
+    - Check Supabase database size (free tier: 500MB limit)
+    - Check Supabase storage usage (free tier: 1GB limit)
+    - Review Render logs for errors
+    - Check email delivery rate
+
+  Monthly:
+    - Review and clean up unused media files in Supabase Storage
+    - Check Razorpay dashboard for any payment issues
+    - Review auto-cancelled orders for patterns
+
+================================================================================
+9. TROUBLESHOOTING GUIDE
+================================================================================
+
+9.1 BACKEND FAILS TO START ON RENDER
+
+  Symptom: Deployment succeeds but service shows as unhealthy.
+
+  Check:
+    - Render logs for specific error messages
+    - DATABASE_URL is correct (test connection via psql)
+    - All required environment variables are set
+    - Port 8080 is used (Render expects the service to listen on $PORT)
+
+  Common Fixes:
+    - Set SERVER_PORT=8080 explicitly
+    - Use connection pooler URL from Supabase (port 6543, not 5432)
+    - Ensure JDBC prefix: jdbc:postgresql://... if Spring expects it
+
+  Note on DATABASE_URL format:
+    Supabase provides: postgresql://user:pass@host:6543/db
+    Spring Boot may need: jdbc:postgresql://user:pass@host:6543/db
+    Configure accordingly in application-prod.yml
+
+9.2 CORS ERRORS IN BROWSER
+
+  Symptom: API calls fail with "blocked by CORS policy" in console.
+
+  Check:
+    - FRONTEND_URL env variable on Render matches exact Vercel URL
+    - No trailing slash in FRONTEND_URL
+    - https:// prefix included
+    - Backend redeployed after FRONTEND_URL change
+
+  Debug:
+    - Check response headers for Access-Control-Allow-Origin
+    - Verify OPTIONS preflight receives 200
+
+9.3 OTP NOT RECEIVED
+
+  Symptom: User doesn't receive SMS OTP.
+
+  Check:
+    - Supabase Auth logs for SMS sending status
+    - SMS provider (Twilio) balance and quota
+    - Phone number format (+91XXXXXXXXXX)
+    - Supabase rate limiting (max 1 OTP/minute)
+
+  Debug:
+    - In Supabase dashboard → Auth → Users, check if user was created
+    - Check Supabase Auth logs for error messages
+
+9.4 RAZORPAY PAYMENT FAILS
+
+  Symptom: Razorpay checkout opens but payment fails after completion.
+
+  Check:
+    - RAZORPAY_KEY_ID matches RAZORPAY_KEY_SECRET (same mode: test/live)
+    - Signature verification logic is correct
+    - Amount in paise (multiply by 100)
+    - Razorpay webhook (if configured) URL is accessible
+
+  Debug:
+    - Check Razorpay dashboard → Payments for transaction status
+    - Check backend logs for signature verification details
+    - Test with Razorpay test mode first
+
+9.5 IMAGES NOT LOADING
+
+  Symptom: Product images or review media show broken image icons.
+
+  Check:
+    - Supabase Storage bucket is public (for product/review images)
+    - Image URL format is correct
+    - Content-Security-Policy allows Supabase domain in img-src
+    - Storage bucket RLS policies allow SELECT
+
+  Debug:
+    - Open image URL directly in browser
+    - Check Supabase Storage → Policies
+
+9.6 EMAILS NOT SENDING
+
+  Symptom: Order confirmation and notification emails not received.
+
+  Check:
+    - SMTP credentials (host, port, username, password)
+    - For Gmail: App Password used (not regular password)
+    - MAIL_FROM address matches SMTP account
+    - Email not in spam folder
+
+  Debug:
+    - Check backend logs for email sending errors
+    - Test SMTP connection independently
+    - Try telnet to SMTP host:port
+
+9.7 COLD START LATENCY
+
+  Symptom: First API request after idle takes 30-60 seconds.
+
+  Expected Behavior on Render Free Tier:
+    This is normal. Free tier instances spin down after 15 minutes.
+
+  Mitigation:
+    - Set up keep-alive pinging (Section 8.4)
+    - Show loading state on frontend for first request
+    - Add a "warming" indicator if backend returns timeout
+
+================================================================================
+10. FREE TIER LIMITATIONS & WORKAROUNDS
+================================================================================
+
+10.1 RENDER FREE TIER LIMITS
+
+  Limit                   Value              Workaround
+  ──────────────────────  ─────────────────  ──────────────────────────
+  Instance Hours          750 hours/month    Keep-alive uses hours;
+                                             sufficient for 1 service
+  RAM                     512 MB             Optimize JVM: -Xmx400m
+  CPU                     0.1 vCPU           Acceptable for low traffic
+  Bandwidth               100 GB/month       Sufficient for API-only
+  Cold Start              30-60 seconds      Keep-alive pinging
+  Custom SSL              Included           Automatic
+  Auto-Deploy             Included           On git push to main
+
+  JVM Memory Optimization for 512MB:
+    Start command:
+    java -Xmx400m -Xms256m -XX:+UseSerialGC
+         -jar target/flamia-*.jar --spring.profiles.active=prod
+
+10.2 SUPABASE FREE TIER LIMITS
+
+  Limit                   Value              Workaround
+  ──────────────────────  ─────────────────  ──────────────────────────
+  Database Size           500 MB             Monitor usage, optimize
+                                             images before upload
+  Database Rows           Unlimited          N/A
+  File Storage            1 GB               Compress images, enforce
+                                             3MB limit strictly
+  Storage Bandwidth       2 GB/month         Use CDN for static assets
+  Auth Users              50,000             Sufficient for D2C
+  Auth Monthly Active     1,000              Monitor, upgrade if needed
+  Realtime Connections    200                Not using realtime
+  Edge Functions          500,000/month      Not using edge functions
+  Pause after inactivity  7 days             Ensure regular traffic or
+                                             set up keep-alive
+
+  Important: Supabase pauses free projects after 7 days of inactivity.
+  The keep-alive ping to the backend (which queries the database)
+  counts as database activity and prevents pausing.
+
+10.3 VERCEL FREE TIER LIMITS
+
+  Limit                   Value              Workaround
+  ──────────────────────  ─────────────────  ──────────────────────────
+  Bandwidth               100 GB/month       Sufficient for SPA
+  Deployments             Unlimited          N/A
+  Builds                  6,000 minutes/mo   Sufficient
+  Serverless Functions    100,000/month      Not using (SPA only)
+  Custom Domains          Included           Configure as needed
+  HTTPS                   Automatic          Included
+  Analytics               Basic (free)       Upgrade for details
+
+10.4 RAZORPAY LIMITS
+
+  No significant free tier limits for Razorpay.
+  Transaction fees: 2% per transaction (standard pricing).
+  No monthly fees or minimum commitments.
+  KYC required for live mode.
+
+================================================================================
+END OF DOCUMENT — FLAMIA_DEPLOYMENT_GUIDE.txt
+================================================================================

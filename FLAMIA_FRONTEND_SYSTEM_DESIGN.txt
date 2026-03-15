@@ -1,0 +1,902 @@
+================================================================================
+FLAMIA — FRONTEND SYSTEM DESIGN
+React (Vite) + Tailwind CSS + Framer Motion
+================================================================================
+
+Document Version : 1.0
+Last Updated     : 2026-03-15
+Status           : Production-Ready Specification
+Classification   : Internal Engineering Document
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Frontend Architecture Overview
+2. Folder Structure
+3. Component Strategy
+4. State Management
+5. Routing Architecture
+6. Animation Strategy
+7. API Integration Layer
+8. Authentication Flow (Frontend)
+9. Page List & Descriptions
+10. UI Flow Diagrams
+11. Performance Optimization Strategy
+12. Error Handling Strategy
+13. Responsive Design Strategy
+
+================================================================================
+1. FRONTEND ARCHITECTURE OVERVIEW
+================================================================================
+
+The Flamia frontend is a single-page application (SPA) built with React 18
+and Vite as the build tool. The application follows a feature-based
+architecture where code is organized by domain features rather than technical
+layers.
+
+Core Principles:
+  - Feature-based folder organization
+  - Component composition over inheritance
+  - Separation of UI components from business logic
+  - Centralized API layer via Axios instance
+  - Client-side state managed by Zustand (cart) and React state (UI)
+  - Supabase JS SDK used exclusively for phone OTP authentication
+  - All backend communication through REST API via Axios
+  - Animation-first design using Framer Motion
+
+Build Configuration:
+  - Vite 5.x with React plugin
+  - Tailwind CSS 3.x with custom design tokens
+  - Path aliases configured via vite.config.js (@/ → src/)
+  - Environment variables via .env files (VITE_ prefix)
+  - Code splitting via React.lazy() and Suspense
+
+================================================================================
+2. FOLDER STRUCTURE
+================================================================================
+
+flamia-frontend/
+├── public/
+│   ├── favicon.ico
+│   ├── og-image.jpg                    # Open Graph image for social sharing
+│   └── fonts/                          # Self-hosted premium fonts
+│       ├── cormorant-garamond/
+│       └── inter/
+│
+├── src/
+│   ├── main.jsx                        # Application entry point
+│   ├── App.jsx                         # Root component with router
+│   ├── index.css                       # Global styles + Tailwind directives
+│   │
+│   ├── config/
+│   │   ├── constants.js                # App-wide constants
+│   │   ├── env.js                      # Environment variable access
+│   │   └── routes.js                   # Route path constants
+│   │
+│   ├── lib/
+│   │   ├── axios.js                    # Axios instance with interceptors
+│   │   ├── supabase.js                 # Supabase client initialization
+│   │   └── razorpay.js                 # Razorpay checkout helper
+│   │
+│   ├── hooks/
+│   │   ├── useAuth.js                  # Authentication state & actions
+│   │   ├── useProducts.js              # Product fetching & caching
+│   │   ├── useOrders.js                # Order operations
+│   │   ├── useReviews.js               # Review CRUD operations
+│   │   ├── useCart.js                   # Cart store access hook
+│   │   ├── useMediaUpload.js           # Supabase Storage upload logic
+│   │   ├── useScrollAnimation.js       # Intersection observer for scroll
+│   │   ├── useDebounce.js              # Input debouncing
+│   │   └── useMediaQuery.js            # Responsive breakpoint detection
+│   │
+│   ├── stores/
+│   │   ├── cartStore.js                # Zustand cart state
+│   │   └── authStore.js                # Zustand auth state
+│   │
+│   ├── components/
+│   │   ├── ui/                         # Primitive UI components
+│   │   │   ├── Button.jsx
+│   │   │   ├── Input.jsx
+│   │   │   ├── Modal.jsx
+│   │   │   ├── Drawer.jsx
+│   │   │   ├── Badge.jsx
+│   │   │   ├── Skeleton.jsx
+│   │   │   ├── Toast.jsx
+│   │   │   ├── StarRating.jsx
+│   │   │   ├── ImageGallery.jsx
+│   │   │   ├── AudioPlayer.jsx
+│   │   │   ├── FileUpload.jsx
+│   │   │   ├── Spinner.jsx
+│   │   │   ├── EmptyState.jsx
+│   │   │   └── Divider.jsx
+│   │   │
+│   │   ├── layout/                     # Layout components
+│   │   │   ├── Navbar.jsx
+│   │   │   ├── Footer.jsx
+│   │   │   ├── MobileMenu.jsx
+│   │   │   ├── PageTransition.jsx
+│   │   │   ├── ScrollToTop.jsx
+│   │   │   └── MainLayout.jsx
+│   │   │
+│   │   └── shared/                     # Shared composed components
+│   │       ├── ProductCard.jsx
+│   │       ├── ProductGrid.jsx
+│   │       ├── CartItem.jsx
+│   │       ├── OrderCard.jsx
+│   │       ├── ReviewCard.jsx
+│   │       ├── ReviewForm.jsx
+│   │       ├── AddressForm.jsx
+│   │       ├── CouponInput.jsx
+│   │       ├── PriceDisplay.jsx
+│   │       ├── CategoryFilter.jsx
+│   │       ├── SortDropdown.jsx
+│   │       └── SearchBar.jsx
+│   │
+│   ├── features/
+│   │   ├── landing/                    # Landing page feature
+│   │   │   ├── HeroSection.jsx
+│   │   │   ├── StorySection.jsx
+│   │   │   ├── FeaturedProducts.jsx
+│   │   │   ├── TestimonialsSection.jsx
+│   │   │   ├── BrandValueSection.jsx
+│   │   │   ├── NewsletterSection.jsx
+│   │   │   └── ParallaxImage.jsx
+│   │   │
+│   │   ├── products/                   # Product browsing feature
+│   │   │   ├── ProductListPage.jsx
+│   │   │   ├── ProductDetailPage.jsx
+│   │   │   ├── ProductFilters.jsx
+│   │   │   └── ProductSearch.jsx
+│   │   │
+│   │   ├── cart/                       # Cart feature
+│   │   │   ├── CartDrawer.jsx
+│   │   │   └── CartPage.jsx
+│   │   │
+│   │   ├── checkout/                   # Checkout feature
+│   │   │   ├── CheckoutPage.jsx
+│   │   │   ├── AddressStep.jsx
+│   │   │   ├── PaymentStep.jsx
+│   │   │   ├── OrderSummaryStep.jsx
+│   │   │   ├── RazorpayCheckout.jsx
+│   │   │   └── UpiManualPayment.jsx
+│   │   │
+│   │   ├── orders/                     # Order management feature
+│   │   │   ├── OrdersPage.jsx
+│   │   │   └── OrderDetailPage.jsx
+│   │   │
+│   │   ├── reviews/                    # Review feature
+│   │   │   ├── ReviewList.jsx
+│   │   │   ├── ReviewSubmission.jsx
+│   │   │   └── MediaPreview.jsx
+│   │   │
+│   │   ├── auth/                       # Authentication feature
+│   │   │   ├── LoginPage.jsx
+│   │   │   ├── OtpInput.jsx
+│   │   │   └── PhoneInput.jsx
+│   │   │
+│   │   ├── account/                    # Account feature
+│   │   │   ├── AccountPage.jsx
+│   │   │   ├── AddressBook.jsx
+│   │   │   └── ProfileSection.jsx
+│   │   │
+│   │   └── admin/                      # Admin feature
+│   │       ├── AdminDashboard.jsx
+│   │       ├── AdminProducts.jsx
+│   │       ├── AdminProductForm.jsx
+│   │       ├── AdminOrders.jsx
+│   │       ├── AdminOrderDetail.jsx
+│   │       ├── AdminCoupons.jsx
+│   │       ├── AdminCouponForm.jsx
+│   │       ├── AdminReviews.jsx
+│   │       ├── AdminCategories.jsx
+│   │       └── AdminLayout.jsx
+│   │
+│   ├── pages/                          # Static/policy pages
+│   │   ├── AboutPage.jsx
+│   │   ├── ContactPage.jsx
+│   │   ├── PrivacyPolicyPage.jsx
+│   │   ├── TermsPage.jsx
+│   │   ├── ShippingPolicyPage.jsx
+│   │   ├── RefundPolicyPage.jsx
+│   │   └── NotFoundPage.jsx
+│   │
+│   ├── guards/
+│   │   ├── AuthGuard.jsx               # Redirect to login if unauthenticated
+│   │   └── AdminGuard.jsx              # Redirect if not admin role
+│   │
+│   └── utils/
+│       ├── formatters.js               # Currency, date, phone formatting
+│       ├── validators.js               # Client-side validation helpers
+│       ├── mediaHelpers.js             # File type/size validation
+│       └── seo.js                      # Meta tag helpers
+│
+├── tailwind.config.js                  # Tailwind configuration with tokens
+├── postcss.config.js                   # PostCSS configuration
+├── vite.config.js                      # Vite configuration
+├── .env.example                        # Environment variable template
+├── .env.development                    # Development environment
+├── .env.production                     # Production environment
+├── package.json
+├── .gitignore
+└── README.md
+
+================================================================================
+3. COMPONENT STRATEGY
+================================================================================
+
+3.1 COMPONENT HIERARCHY
+
+  Level 1 — Primitives (src/components/ui/)
+    Atomic, reusable UI elements with no business logic.
+    Accept props for customization. Follow a consistent API pattern.
+    Examples: Button, Input, Modal, Badge, Skeleton
+
+  Level 2 — Composed Components (src/components/shared/)
+    Combine primitives into meaningful UI blocks.
+    May contain light presentation logic but no API calls.
+    Examples: ProductCard, ReviewCard, AddressForm
+
+  Level 3 — Feature Components (src/features/*/)
+    Full feature implementations containing business logic,
+    API integration (via hooks), and composed UI.
+    Examples: CheckoutPage, ProductDetailPage, AdminOrders
+
+  Level 4 — Layout Components (src/components/layout/)
+    Page structure components that wrap feature content.
+    Handle navigation, transitions, and responsive layout.
+    Examples: MainLayout, Navbar, Footer, PageTransition
+
+3.2 COMPONENT DESIGN RULES
+
+  Rule 1:  Every component must be a functional component using hooks.
+  Rule 2:  Props must be destructured with default values where sensible.
+  Rule 3:  UI primitives must not import from features/ or hooks/ (no
+           business logic in primitives).
+  Rule 4:  Feature components must use custom hooks for API calls and
+           state management.
+  Rule 5:  All animations must use Framer Motion's motion.* components.
+  Rule 6:  Loading states must use Skeleton components, never spinners
+           for content areas (spinners only for actions like button loading).
+  Rule 7:  Error states must be handled with user-friendly messages
+           and retry options.
+  Rule 8:  All interactive elements must have unique id attributes for
+           testing and accessibility.
+  Rule 9:  Images must use lazy loading with blur-up placeholder pattern.
+  Rule 10: Mobile-first design — start with mobile styles, extend via
+           Tailwind responsive prefixes (sm:, md:, lg:, xl:).
+
+3.3 BUTTON COMPONENT API (EXAMPLE)
+
+  Props:
+    variant    : "primary" | "secondary" | "ghost" | "danger"
+    size       : "sm" | "md" | "lg"
+    isLoading  : boolean
+    disabled   : boolean
+    fullWidth  : boolean
+    icon       : ReactNode (optional leading icon)
+    children   : ReactNode
+
+  The Button component applies Framer Motion whileTap and whileHover
+  animations automatically based on the variant.
+
+================================================================================
+4. STATE MANAGEMENT
+================================================================================
+
+4.1 STATE MANAGEMENT STRATEGY
+
+  State Type              Solution                Scope
+  ──────────────────────  ──────────────────────  ──────────────────
+  Cart state              Zustand + localStorage  Global, persistent
+  Auth state              Zustand                 Global, session
+  Server data (products)  React state + hooks     Component tree
+  UI state (modals, etc)  React useState          Component-local
+  Form state              React useState          Component-local
+  URL state (filters)     URL search params       Browser URL
+
+4.2 CART STORE (ZUSTAND)
+
+  File: src/stores/cartStore.js
+
+  State Shape:
+    {
+      items: [
+        {
+          productId: string,
+          name: string,
+          price: number,
+          quantity: number,
+          image: string,
+          maxStock: number
+        }
+      ],
+      couponCode: string | null,
+      discount: number
+    }
+
+  Actions:
+    addItem(product)         — Add product or increment quantity
+    removeItem(productId)    — Remove product from cart
+    updateQuantity(productId, quantity) — Set specific quantity
+    clearCart()              — Empty the cart
+    applyCoupon(code)        — Set coupon code
+    removeCoupon()           — Clear coupon
+    setDiscount(amount)      — Set discount after API validation
+    getSubtotal()            — Computed subtotal
+    getTotal()               — Computed total after discount
+    getItemCount()           — Computed total item count
+
+  Persistence:
+    Zustand persist middleware with localStorage adapter.
+    Cart survives page refresh and browser close.
+    Cart is NOT synced to backend (client-only).
+
+4.3 AUTH STORE (ZUSTAND)
+
+  File: src/stores/authStore.js
+
+  State Shape:
+    {
+      user: {
+        id: string,
+        phone: string,
+        role: "CUSTOMER" | "ADMIN",
+        name: string | null,
+        email: string | null
+      } | null,
+      session: {
+        accessToken: string,
+        refreshToken: string,
+        expiresAt: number
+      } | null,
+      isLoading: boolean,
+      isAuthenticated: boolean
+    }
+
+  Actions:
+    setUser(user)            — Set user after login
+    setSession(session)      — Set JWT session
+    logout()                 — Clear user and session
+    refreshSession()         — Refresh JWT token
+    initialize()             — Check for existing session on app load
+
+  The auth store listens to Supabase auth state changes and updates
+  automatically. The JWT access token is attached to every Axios request
+  via an interceptor.
+
+================================================================================
+5. ROUTING ARCHITECTURE
+================================================================================
+
+  Router: React Router v6 with createBrowserRouter
+
+  Route Definitions:
+
+  Path                          Component              Guard        Access
+  ────────────────────────────  ─────────────────────  ───────────  ──────
+  /                             LandingPage            None         Public
+  /products                     ProductListPage        None         Public
+  /products/:slug               ProductDetailPage      None         Public
+  /cart                         CartPage               None         Public
+  /login                        LoginPage              None         Public
+  /about                        AboutPage              None         Public
+  /contact                      ContactPage            None         Public
+  /privacy-policy               PrivacyPolicyPage      None         Public
+  /terms                        TermsPage              None         Public
+  /shipping-policy              ShippingPolicyPage     None         Public
+  /refund-policy                RefundPolicyPage       None         Public
+  /checkout                     CheckoutPage           AuthGuard    Customer
+  /orders                       OrdersPage             AuthGuard    Customer
+  /orders/:orderId              OrderDetailPage        AuthGuard    Customer
+  /account                      AccountPage            AuthGuard    Customer
+  /account/addresses            AddressBook            AuthGuard    Customer
+  /admin                        AdminDashboard         AdminGuard   Admin
+  /admin/products               AdminProducts          AdminGuard   Admin
+  /admin/products/new           AdminProductForm       AdminGuard   Admin
+  /admin/products/:id/edit      AdminProductForm       AdminGuard   Admin
+  /admin/orders                 AdminOrders            AdminGuard   Admin
+  /admin/orders/:orderId        AdminOrderDetail       AdminGuard   Admin
+  /admin/coupons                AdminCoupons           AdminGuard   Admin
+  /admin/coupons/new            AdminCouponForm        AdminGuard   Admin
+  /admin/coupons/:id/edit       AdminCouponForm        AdminGuard   Admin
+  /admin/reviews                AdminReviews           AdminGuard   Admin
+  /admin/categories             AdminCategories        AdminGuard   Admin
+  *                             NotFoundPage           None         Public
+
+  Route Guards:
+    AuthGuard  — Checks authStore.isAuthenticated. Redirects to /login
+                 with return URL if not authenticated.
+    AdminGuard — Checks authStore.user.role === "ADMIN". Redirects to /
+                 if not admin.
+
+================================================================================
+6. ANIMATION STRATEGY
+================================================================================
+
+6.1 ANIMATION PHILOSOPHY
+
+  Every animation in Flamia must feel:
+    - Intentional: No animation without purpose
+    - Luxurious: Smooth, elegant, never jarring
+    - Cinematic: Story-driven, scroll-triggered reveals
+    - Performant: GPU-accelerated properties only (transform, opacity)
+
+6.2 ANIMATION LIBRARY: FRAMER MOTION
+
+  All animations use Framer Motion's declarative API.
+  No CSS animations or keyframes for interactive elements.
+  CSS transitions are permitted for simple hover states on Tailwind utilities.
+
+6.3 ANIMATION PATTERNS
+
+  Pattern 1 — Page Transitions
+    Component: PageTransition.jsx wrapping every route
+    Enter: Fade in + slight upward slide (y: 20 → 0, opacity: 0 → 1)
+    Exit: Fade out (opacity: 1 → 0)
+    Duration: 400ms, ease: [0.25, 0.1, 0.25, 1]
+    Implementation: AnimatePresence + motion.div on route change
+
+  Pattern 2 — Scroll Reveals
+    Used on: Landing page sections, product grid items
+    Trigger: Intersection Observer (useScrollAnimation hook)
+    Effect: Fade in + slide up (y: 40 → 0, opacity: 0 → 1)
+    Duration: 600ms, ease: "easeOut"
+    Stagger: 100ms between sibling elements
+    Threshold: 0.2 (trigger when 20% visible)
+
+  Pattern 3 — Hero Section
+    Background: Slow Ken Burns zoom effect on hero image
+    Text: Staggered character/word reveal with fade
+    CTA Button: Scale-in with slight bounce
+    Timeline: Sequential — image first, then text, then CTA
+
+  Pattern 4 — Product Card Hover
+    Scale: 1 → 1.03
+    Shadow: Elevated shadow on hover
+    Image: Slight zoom (1 → 1.08) within overflow-hidden container
+    Duration: 300ms, ease: "easeInOut"
+
+  Pattern 5 — Cart Drawer
+    Entry: Slide in from right (x: "100%" → 0)
+    Overlay: Fade in backdrop
+    Exit: Slide out to right
+    Duration: 350ms, ease: [0.25, 0.1, 0.25, 1]
+
+  Pattern 6 — Modal
+    Entry: Scale from 0.95 → 1, opacity 0 → 1
+    Overlay: Fade in backdrop
+    Exit: Scale to 0.95, fade out
+    Duration: 250ms
+
+  Pattern 7 — Toast Notifications
+    Entry: Slide down from top + fade in
+    Exit: Slide up + fade out
+    Auto-dismiss: 4 seconds
+    Stack: Latest on top, older toasts push down
+
+  Pattern 8 — Button Interactions
+    whileHover: scale 1.02, brightness increase
+    whileTap: scale 0.98
+    Loading: Spinner replaces text with cross-fade
+
+  Pattern 9 — Image Gallery (Product Detail)
+    Main image: Cross-fade between selected images
+    Thumbnails: Scale + border highlight on active
+    Swipe: Drag gesture for mobile users
+
+  Pattern 10 — Parallax Scrolling (Landing Page)
+    Selected images scroll at 0.5x speed relative to content
+    Text overlays scroll at 0.8x speed
+    Implementation: useTransform + useScroll from Framer Motion
+
+6.4 ANIMATION PERFORMANCE RULES
+
+  Rule 1: Only animate transform and opacity (GPU-composited properties)
+  Rule 2: Never animate width, height, top, left, margin, or padding
+  Rule 3: Use will-change sparingly and remove after animation completes
+  Rule 4: Disable non-essential animations on prefers-reduced-motion
+  Rule 5: Limit simultaneous animations to 5 elements max per viewport
+  Rule 6: Use layout animations only for small layout shifts (< 200px)
+
+================================================================================
+7. API INTEGRATION LAYER
+================================================================================
+
+7.1 AXIOS INSTANCE CONFIGURATION
+
+  File: src/lib/axios.js
+
+  Base URL: Loaded from VITE_API_BASE_URL environment variable
+  Timeout: 15000ms (15 seconds)
+  Headers: Content-Type: application/json
+
+  Request Interceptor:
+    - Reads JWT access token from authStore
+    - Attaches Authorization: Bearer <token> header
+    - Skips for public endpoints
+
+  Response Interceptor:
+    - On 401: Attempts token refresh via Supabase
+    - On refresh success: Retries original request with new token
+    - On refresh failure: Logs out user, redirects to /login
+    - On 403: Shows "Access Denied" toast
+    - On 500: Shows "Server Error" toast with retry option
+    - On network error: Shows "Connection Lost" toast
+
+7.2 API SERVICE MODULES
+
+  Each feature has a corresponding API service file:
+
+  src/lib/api/
+    ├── authApi.js          # POST /auth/register (sync user to backend)
+    ├── productsApi.js      # GET /products, GET /products/:slug
+    ├── categoriesApi.js    # GET /categories
+    ├── ordersApi.js        # POST /orders, GET /orders, GET /orders/:id
+    ├── paymentsApi.js      # POST /payments/razorpay, POST /payments/upi
+    ├── reviewsApi.js       # POST /reviews, GET /reviews, DELETE /reviews/:id
+    ├── couponsApi.js       # POST /coupons/validate
+    ├── addressesApi.js     # CRUD /addresses
+    └── adminApi.js         # Admin-specific endpoints
+
+  Each API module exports functions that return Axios promises.
+  Example:
+    export const getProducts = (params) => axios.get('/products', { params })
+    export const getProductBySlug = (slug) => axios.get(`/products/${slug}`)
+
+================================================================================
+8. AUTHENTICATION FLOW (FRONTEND)
+================================================================================
+
+8.1 LOGIN FLOW
+
+  Step 1: User navigates to /login
+  Step 2: User enters Indian mobile number (+91 XXXXXXXXXX)
+  Step 3: Client-side validation:
+           - Must start with +91
+           - Must be exactly 10 digits after country code
+           - Must match Indian mobile number pattern
+  Step 4: Frontend calls supabase.auth.signInWithOtp({ phone })
+  Step 5: Supabase sends OTP via SMS
+  Step 6: User enters 6-digit OTP
+  Step 7: Frontend calls supabase.auth.verifyOtp({ phone, token, type: 'sms' })
+  Step 8: On success, Supabase returns session with JWT
+  Step 9: Frontend stores session in authStore
+  Step 10: Frontend calls POST /api/auth/sync to register/sync user in backend
+  Step 11: Backend creates user record if not exists, returns user with role
+  Step 12: Frontend updates authStore with user role
+  Step 13: Redirect to original page or /
+
+8.2 SESSION MANAGEMENT
+
+  - Supabase JS SDK handles token refresh automatically
+  - Frontend listens to supabase.auth.onAuthStateChange()
+  - On TOKEN_REFRESHED event: update authStore session
+  - On SIGNED_OUT event: clear authStore, redirect to /
+  - On app initialization: call supabase.auth.getSession() to restore session
+
+8.3 LOGOUT FLOW
+
+  Step 1: User clicks logout
+  Step 2: Frontend calls supabase.auth.signOut()
+  Step 3: authStore.logout() clears user and session
+  Step 4: Cart state is preserved (intentional — cart is not tied to user)
+  Step 5: Redirect to /
+
+================================================================================
+9. PAGE LIST & DESCRIPTIONS
+================================================================================
+
+9.1 PUBLIC PAGES
+
+  Landing Page (/)
+    The cinematic entry point. Full-viewport hero with parallax,
+    scrolling story sections about the brand, featured product
+    highlights, customer testimonials carousel, and newsletter signup.
+    This page must feel like a luxury brand film.
+
+  Product List (/products)
+    Grid layout of product cards with sidebar filters (category, price
+    range, scent family) and sort dropdown. Infinite scroll or
+    pagination. Search bar at top. Mobile: filters in a slide-out drawer.
+
+  Product Detail (/products/:slug)
+    Large image gallery with thumbnails, product name, price, description,
+    scent notes, size options (if applicable), add-to-cart button,
+    and reviews section below. Related products carousel at bottom.
+
+  Cart (/cart)
+    Full page cart view with item list, quantity adjusters, remove buttons,
+    coupon code input, price summary, and checkout CTA.
+
+  Login (/login)
+    Minimal, elegant page with phone input and OTP verification.
+    Split layout: left side with brand imagery, right side with form.
+    Animated transitions between phone input and OTP input stages.
+
+  About (/about)
+    Brand story with cinematic scroll animations. Founder story,
+    craftsmanship details, ingredient sourcing, sustainability.
+
+  Contact (/contact)
+    Contact form with name, email, phone, message fields.
+    Business address, email, and phone displayed alongside.
+
+  Policy Pages
+    Privacy Policy, Terms of Service, Shipping Policy, Refund Policy.
+    Well-structured text content with proper headings.
+
+  404 Page
+    Elegant not-found page with animated candle illustration,
+    message, and link back to home.
+
+9.2 AUTHENTICATED CUSTOMER PAGES
+
+  Checkout (/checkout)
+    Multi-step checkout: Address → Order Summary → Payment.
+    Step indicator at top. Address selection or new address form.
+    Order summary with items, quantities, prices, coupon, total.
+    Payment options: Razorpay button and Manual UPI toggle.
+
+  Orders (/orders)
+    List of customer's orders with order ID, date, total, status badge,
+    and item count. Click to view order detail.
+
+  Order Detail (/orders/:orderId)
+    Complete order information: items, quantities, prices,
+    delivery address, payment method, payment status, order status,
+    tracking ID (if shipped). Timeline visualization of status history.
+
+  Account (/account)
+    Profile information (name, phone, email), address book management.
+
+  Address Book (/account/addresses)
+    List of saved addresses with add, edit, delete, and set-as-default.
+
+9.3 ADMIN PAGES
+
+  Admin Dashboard (/admin)
+    Overview cards: total orders, revenue (today/week/month),
+    pending UPI verifications, pending orders. Recent orders table.
+
+  Admin Products (/admin/products)
+    Table of all products with image thumbnail, name, price, stock,
+    status (active/inactive), and action buttons (edit, delete).
+    "Add Product" button.
+
+  Admin Product Form (/admin/products/new, /admin/products/:id/edit)
+    Form with: name, slug (auto-generated), description, price,
+    compare-at price, stock quantity, category, scent notes,
+    images (upload to Supabase Storage), active/inactive toggle.
+
+  Admin Orders (/admin/orders)
+    Table of all orders with filters by status. Columns: order ID,
+    customer phone, total, payment method, payment status, order status,
+    date. Click to view detail.
+
+  Admin Order Detail (/admin/orders/:orderId)
+    Full order info + admin actions:
+    - Update order status
+    - Add tracking ID (for SHIPPED status)
+    - Verify UPI payment (approve/reject with screenshot + UTR display)
+
+  Admin Coupons (/admin/coupons)
+    Table of coupons with code, discount type, value, usage count,
+    active status. Add, edit, deactivate actions.
+
+  Admin Reviews (/admin/reviews)
+    Table of all reviews across products. Columns: product name,
+    customer, rating, date, media indicator. Delete action button.
+
+  Admin Categories (/admin/categories)
+    Simple CRUD for product categories. Name, slug, description,
+    image. Drag-to-reorder for display order.
+
+================================================================================
+10. UI FLOW DIAGRAMS
+================================================================================
+
+10.1 GUEST BROWSING FLOW
+
+  Landing Page
+       │
+       ├──→ View Products → Product List → Product Detail
+       │                                        │
+       │                                        ├──→ Add to Cart (local)
+       │                                        │
+       │                                        └──→ View Reviews
+       │
+       ├──→ About Page
+       ├──→ Contact Page
+       └──→ Login Page
+
+10.2 PURCHASE FLOW
+
+  Product Detail
+       │
+       ▼
+  Add to Cart → Cart Drawer/Page
+       │
+       ▼
+  Proceed to Checkout ──→ [Not logged in?] ──→ Login ──→ Return to Checkout
+       │
+       ▼
+  Address Step
+       │ Select existing or add new address
+       ▼
+  Order Summary Step
+       │ Review items, apply coupon
+       ▼
+  Payment Step
+       │
+       ├──→ Razorpay Checkout
+       │         │
+       │         ├──→ Success → Order Confirmation → Order Detail
+       │         └──→ Failure → Retry or Manual UPI
+       │
+       └──→ Manual UPI
+                │
+                ├──→ Show UPI ID → User pays externally
+                ├──→ Upload Screenshot
+                ├──→ Enter UTR
+                └──→ Submit → Order placed (PENDING) → Admin verifies
+
+10.3 REVIEW SUBMISSION FLOW
+
+  Order Detail (DELIVERED status)
+       │
+       ▼
+  "Write a Review" button
+       │
+       ▼
+  Review Form
+       │ ├── Star rating (required)
+       │ ├── Text comment (optional)
+       │ ├── Upload images (optional, max 3MB each)
+       │ └── Upload audio (optional, max 3MB each)
+       │
+       ▼
+  Media uploaded to Supabase Storage
+       │
+       ▼
+  Review submitted via API
+       │
+       ▼
+  Success → Review appears on Product Detail page
+
+10.4 ADMIN ORDER MANAGEMENT FLOW
+
+  Admin Dashboard
+       │
+       ▼
+  Admin Orders (filtered table)
+       │
+       ▼
+  Order Detail
+       │
+       ├──→ [UPI PENDING] → View screenshot + UTR → Approve/Reject
+       │
+       ├──→ [CONFIRMED] → Update to SHIPPED + Add Tracking ID
+       │
+       └──→ [SHIPPED] → Update to DELIVERED
+
+10.5 AUTHENTICATION STATE FLOW
+
+  App Loads
+       │
+       ▼
+  Check Supabase Session
+       │
+       ├──→ [Session exists] → Validate JWT → Set Auth State → Render App
+       │
+       └──→ [No session] → Set Guest State → Render App
+                                │
+                                ▼
+                          [User clicks Login]
+                                │
+                                ▼
+                          Enter Phone → Send OTP → Enter OTP → Verify
+                                │
+                                ├──→ [Success] → Sync with Backend → Set Auth
+                                └──→ [Failure] → Show Error → Retry
+
+================================================================================
+11. PERFORMANCE OPTIMIZATION STRATEGY
+================================================================================
+
+  Strategy 1:  Code Splitting
+    - React.lazy() for all route-level components
+    - Suspense with Skeleton fallbacks
+    - Admin bundle split from main bundle (dynamic import)
+
+  Strategy 2:  Image Optimization
+    - All product images served from Supabase Storage CDN
+    - Use Supabase image transformation for responsive sizes
+    - Lazy loading with IntersectionObserver
+    - Blur-up placeholder pattern (small base64 → full image)
+    - WebP format preference
+
+  Strategy 3:  Bundle Optimization
+    - Tree shaking via Vite (ES modules)
+    - Vendor chunk splitting (react, framer-motion, axios separate)
+    - Preload critical CSS and fonts
+    - Font-display: swap for web fonts
+
+  Strategy 4:  Network Optimization
+    - API response caching headers (stale-while-revalidate)
+    - Debounced search input (300ms)
+    - Prefetch product data on hover (product list → detail)
+    - Abort controller for cancelled API requests
+
+  Strategy 5:  Runtime Optimization
+    - React.memo for expensive list items (ProductCard, ReviewCard)
+    - useMemo for computed values (cart totals, filtered products)
+    - useCallback for event handlers passed to memoized children
+    - Virtualized lists for admin tables with many rows
+
+================================================================================
+12. ERROR HANDLING STRATEGY
+================================================================================
+
+  Layer 1 — API Error Interceptor
+    Axios response interceptor catches all API errors.
+    Maps HTTP status codes to user-friendly messages.
+    Triggers toast notifications for transient errors.
+    Redirects for auth errors (401, 403).
+
+  Layer 2 — Component Error Boundaries
+    React Error Boundary wraps the entire app.
+    Feature-specific error boundaries wrap each major section.
+    Fallback UI shows a friendly error message with retry button.
+
+  Layer 3 — Form Validation Errors
+    Client-side validation before API calls.
+    Inline error messages below form fields.
+    Field highlighting on validation failure.
+    Phone number format validation for OTP.
+
+  Layer 4 — Empty States
+    Dedicated EmptyState component for:
+    - No products found (after search/filter)
+    - Empty cart
+    - No orders yet
+    - No reviews yet
+    Each with relevant illustration, message, and action CTA.
+
+================================================================================
+13. RESPONSIVE DESIGN STRATEGY
+================================================================================
+
+  Breakpoints (Tailwind defaults):
+    sm   : 640px    (large phones, landscape)
+    md   : 768px    (tablets)
+    lg   : 1024px   (small desktops)
+    xl   : 1280px   (desktops)
+    2xl  : 1536px   (large desktops)
+
+  Mobile-First Approach:
+    Base styles target mobile (< 640px).
+    Progressive enhancement for larger screens.
+
+  Layout Adaptations:
+    Component         Mobile              Desktop
+    ────────────────  ──────────────────   ──────────────────
+    Navbar            Hamburger menu       Full horizontal nav
+    Product Grid      1 column             3-4 columns
+    Product Detail    Stacked layout       Side-by-side
+    Cart              Full page            Drawer option
+    Checkout          Single column        Two column
+    Admin Tables      Card layout          Full table
+    Filters           Bottom sheet/drawer  Sidebar
+    Footer            Stacked sections     Multi-column grid
+    Hero Section      Full-width, compact  Full viewport height
+
+  Touch Considerations:
+    - Min tap target size: 44x44px
+    - Swipe gestures for image gallery
+    - Pull-to-refresh pattern for order list
+    - Bottom-anchored mobile navigation consideration
+
+================================================================================
+END OF DOCUMENT — FLAMIA_FRONTEND_SYSTEM_DESIGN.txt
+================================================================================

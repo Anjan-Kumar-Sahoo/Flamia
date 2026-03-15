@@ -1,0 +1,133 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ──────────────────────────────────────────────
+   Base & Reset
+   ────────────────────────────────────────────── */
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-charcoal-900 text-white font-sans;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ── Typography ──────────────────────────── */
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif font-medium;
+    line-height: 1.2;
+  }
+
+  h1 { @apply text-5xl md:text-7xl; }
+  h2 { @apply text-3xl md:text-5xl; }
+  h3 { @apply text-2xl md:text-3xl; }
+  h4 { @apply text-xl md:text-2xl; }
+
+  a {
+    @apply transition-colors duration-300;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  img {
+    max-width: 100%;
+    display: block;
+  }
+
+  /* ── Scrollbar ───────────────────────────── */
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-charcoal-900;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-charcoal-600 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-charcoal-500;
+  }
+}
+
+/* ──────────────────────────────────────────────
+   Component Utilities
+   ────────────────────────────────────────────── */
+
+@layer components {
+  /* Glass Card */
+  .glass-card {
+    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl;
+  }
+
+  /* Flame Button (Primary CTA) */
+  .btn-flame {
+    @apply bg-gradient-to-r from-flame-600 to-flame-500
+           text-white font-sans font-semibold
+           px-8 py-3 rounded-full
+           hover:from-flame-500 hover:to-flame-400
+           transition-all duration-300
+           shadow-lg shadow-flame-500/20
+           hover:shadow-xl hover:shadow-flame-500/30
+           active:scale-[0.98];
+  }
+
+  /* Ghost Button */
+  .btn-ghost {
+    @apply border border-white/20 text-white
+           font-sans font-medium
+           px-8 py-3 rounded-full
+           hover:bg-white/10 hover:border-white/40
+           transition-all duration-300
+           active:scale-[0.98];
+  }
+
+  /* Section Container */
+  .section-container {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* Flame Divider */
+  .flame-divider {
+    @apply w-16 h-[2px] bg-gradient-to-r from-flame-500 to-flame-300;
+  }
+
+  /* Input Field */
+  .input-field {
+    @apply bg-charcoal-800 border border-charcoal-600
+           text-white placeholder-charcoal-400
+           px-4 py-3 rounded-xl
+           focus:outline-none focus:border-flame-500 focus:ring-1 focus:ring-flame-500
+           transition-all duration-300;
+  }
+}
+
+/* ──────────────────────────────────────────────
+   Animations
+   ────────────────────────────────────────────── */
+
+@layer utilities {
+  .animate-delay-200 { animation-delay: 200ms; }
+  .animate-delay-400 { animation-delay: 400ms; }
+  .animate-delay-600 { animation-delay: 600ms; }
+  .animate-delay-800 { animation-delay: 800ms; }
+}

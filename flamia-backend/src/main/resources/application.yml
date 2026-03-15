@@ -1,0 +1,62 @@
+server:
+  port: ${SERVER_PORT:8080}
+
+spring:
+  application:
+    name: flamia
+
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/flamia}
+    username: ${DATABASE_USERNAME:postgres}
+    password: ${DATABASE_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: ${JPA_SHOW_SQL:false}
+    open-in-view: false
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+        transport:
+          protocol: smtp
+
+  servlet:
+    multipart:
+      max-file-size: 3MB
+      max-request-size: 10MB
+
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    check-template-location: true
+
+# ──────────────────────────────────────────────────
+# Flamia Custom Properties
+# ──────────────────────────────────────────────────
+flamia:
+  supabase:
+    url: ${SUPABASE_URL:}
+    jwt-secret: ${SUPABASE_JWT_SECRET:}
+    service-key: ${SUPABASE_SERVICE_KEY:}
+  razorpay:
+    key-id: ${RAZORPAY_KEY_ID:}
+    key-secret: ${RAZORPAY_KEY_SECRET:}
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  mail:
+    from: ${MAIL_FROM:noreply@flamia.in}
