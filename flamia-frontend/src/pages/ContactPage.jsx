@@ -24,8 +24,8 @@ const ContactPage = () => {
 
   const contactInfo = [
     { icon: HiOutlineEnvelope, label: 'Email', value: 'hello@flamia.in' },
-    { icon: HiOutlinePhone, label: 'Phone', value: '+91 80 4567 8901' },
-    { icon: HiOutlineMapPin, label: 'Studio', value: 'Indiranagar, Bangalore 560038' },
+    { icon: HiOutlinePhone, label: 'Phone', value: '+91 96410 03947' },
+    { icon: HiOutlineMapPin, label: 'Studio', value: 'Swami Vivekanand University, West Bengal 700121' },
   ];
 
   return (

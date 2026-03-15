@@ -27,14 +27,17 @@ const HeroSection = () => {
         style={{ scale: bgScale }}
         className="absolute inset-0"
       >
-        <div className="absolute inset-0 bg-charcoal-900" />
-        {/* Gradient overlay for warm candlelight effect */}
+        <img
+          src="/images/hero-bg.png"
+          alt="Flamia luxury candle in elegant setting"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        {/* Hero Gradient Overlay — Design Doc §2.3 */}
         <div
           className="absolute inset-0"
           style={{
             background: `
-              radial-gradient(ellipse 60% 50% at 50% 40%, rgba(200, 148, 74, 0.08) 0%, transparent 70%),
-              linear-gradient(180deg, rgba(13,13,13,0) 0%, rgba(13,13,13,0.3) 40%, rgba(13,13,13,0.85) 100%)
+              linear-gradient(180deg, rgba(13,13,13,0.0) 0%, rgba(13,13,13,0.3) 40%, rgba(13,13,13,0.85) 100%)
             `,
           }}
         />
@@ -125,14 +128,12 @@ const BrandPromise = () => {
             transition={{ duration: 0.8, ease: [0, 0, 0.2, 1] }}
             className="relative aspect-[4/5] rounded-luxury overflow-hidden bg-charcoal-100"
           >
+            <img
+              src="/images/brand-story.png"
+              alt="Artisan hand-pouring Flamia candle wax"
+              className="w-full h-full object-cover"
+            />
             <div className="absolute inset-0 bg-gradient-to-b from-transparent to-charcoal-900/20" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center text-taupe">
-                <svg className="w-20 h-20 mx-auto opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={0.8} d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-                </svg>
-              </div>
-            </div>
           </motion.div>
 
           {/* Text */}
@@ -175,10 +176,10 @@ const FeaturedCollection = () => {
 
   // Placeholder featured products (will be fetched from API)
   const featured = [
-    { name: 'Velvet Noir', scent: 'Oud, Black Rose, Musk', price: '₹2,490' },
-    { name: 'Golden Hour', scent: 'Amber, Bergamot, Vanilla', price: '₹1,990' },
-    { name: 'Monsoon Earth', scent: 'Petrichor, Vetiver, Cedar', price: '₹2,290' },
-    { name: 'Silk & Saffron', scent: 'Saffron, Sandalwood, Milk', price: '₹2,690' },
+    { name: 'Velvet Noir', scent: 'Oud, Black Rose, Musk', price: '₹2,490', image: '/images/velvet-noir.png' },
+    { name: 'Golden Hour', scent: 'Amber, Bergamot, Vanilla', price: '₹1,990', image: '/images/golden-hour.png' },
+    { name: 'Monsoon Earth', scent: 'Petrichor, Vetiver, Cedar', price: '₹2,290', image: '/images/monsoon-earth.png' },
+    { name: 'Silk & Saffron', scent: 'Saffron, Sandalwood, Milk', price: '₹2,690', image: '/images/silk-saffron.png' },
   ];
 
   return (
@@ -210,13 +211,12 @@ const FeaturedCollection = () => {
                 id={`featured-card-${i}`}
               >
                 <div className="aspect-[4/5] bg-cream relative overflow-hidden">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center text-taupe/40">
-                      <svg className="w-16 h-16 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={0.6} d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-                      </svg>
-                    </div>
-                  </div>
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    loading="lazy"
+                    className="w-full h-full object-cover transition-transform duration-500 ease-luxury group-hover:scale-[1.08]"
+                  />
                   {/* Shimmer overlay on hover */}
                   <div
                     className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"

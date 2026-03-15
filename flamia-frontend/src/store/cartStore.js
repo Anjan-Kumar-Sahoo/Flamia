@@ -9,17 +9,18 @@ const useCartStore = create(
 
       // ── Actions ───────────────────────────────
 
-      addItem: (product, quantity = 1) => {
+      addItem: (product) => {
         set((state) => {
+          const productId = product.productId || product.id;
           const existingIndex = state.items.findIndex(
-            (item) => item.productId === product.id
+            (item) => item.productId === productId
           );
 
           if (existingIndex > -1) {
             const updated = [...state.items];
             updated[existingIndex] = {
               ...updated[existingIndex],
-              quantity: updated[existingIndex].quantity + quantity,
+              quantity: updated[existingIndex].quantity + 1,
             };
             return { items: updated };
           }
@@ -28,13 +29,13 @@ const useCartStore = create(
             items: [
               ...state.items,
               {
-                productId: product.id,
+                productId,
                 name: product.name,
                 slug: product.slug,
                 price: product.price,
-                image: product.primaryImageUrl || product.images?.[0]?.url,
-                quantity,
-                maxStock: product.stockQuantity,
+                image: product.image || product.primaryImageUrl || product.images?.[0]?.url,
+                quantity: 1,
+                maxStock: product.maxStock || product.stockQuantity || 99,
               },
             ],
           };
@@ -62,20 +63,15 @@ const useCartStore = create(
       openCart: () => set({ isOpen: true }),
       closeCart: () => set({ isOpen: false }),
 
-      // ── Computed ──────────────────────────────
+      // ── Computed (as functions) ──────────────────
+      getItemCount: () =>
+        get().items.reduce((total, item) => total + item.quantity, 0),
 
-      get itemCount() {
-        return get().items.reduce((total, item) => total + item.quantity, 0);
-      },
-
-      get subtotal() {
-        return get()
-          .items.reduce(
-            (total, item) => total + item.price * item.quantity,
-            0
-          )
-          .toFixed(2);
-      },
+      getSubtotal: () =>
+        get().items.reduce(
+          (total, item) => total + item.price * item.quantity,
+          0
+        ),
     }),
     {
       name: 'flamia-cart',

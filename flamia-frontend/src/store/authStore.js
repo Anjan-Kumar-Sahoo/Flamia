@@ -5,29 +5,38 @@ import api from '../lib/api';
 const useAuthStore = create((set, get) => ({
   user: null,
   session: null,
-  loading: true,
+  isLoading: true,
+  isAuthenticated: false,
 
   // ── Initialize Auth Listener ────────────────
-  init: () => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        get().syncUser(session);
-      }
-      set({ session, loading: false });
-    });
+  initialize: () => {
+    try {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          set({ session, isAuthenticated: true });
+          get().syncUser(session);
+        }
+        set({ isLoading: false });
+      }).catch(() => {
+        set({ isLoading: false });
+      });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      set({ session });
-      if (session) {
-        get().syncUser(session);
-      } else {
-        set({ user: null });
-      }
-    });
+      const {
+        data: { subscription },
+      } = supabase.auth.onAuthStateChange((_event, session) => {
+        set({ session, isAuthenticated: !!session });
+        if (session) {
+          get().syncUser(session);
+        } else {
+          set({ user: null, isAuthenticated: false });
+        }
+      });
 
-    return () => subscription?.unsubscribe();
+      return () => subscription?.unsubscribe();
+    } catch (err) {
+      console.warn('Auth initialization failed (Supabase env vars may be missing):', err);
+      set({ isLoading: false });
+    }
   },
 
   // ── Sync user with backend ──────────────────
@@ -46,16 +55,15 @@ const useAuthStore = create((set, get) => ({
 
   // ── Send OTP ────────────────────────────────
   sendOtp: async (phone) => {
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: `+91${phone}`,
-    });
+    // phone should already include +91 prefix
+    const { error } = await supabase.auth.signInWithOtp({ phone });
     if (error) throw error;
   },
 
   // ── Verify OTP ──────────────────────────────
   verifyOtp: async (phone, otp) => {
     const { data, error } = await supabase.auth.verifyOtp({
-      phone: `+91${phone}`,
+      phone,
       token: otp,
       type: 'sms',
     });
@@ -66,12 +74,8 @@ const useAuthStore = create((set, get) => ({
   // ── Logout ──────────────────────────────────
   logout: async () => {
     await supabase.auth.signOut();
-    set({ user: null, session: null });
+    set({ user: null, session: null, isAuthenticated: false });
   },
-
-  // ── Computed ────────────────────────────────
-  isAuthenticated: () => !!get().session,
-  isAdmin: () => get().user?.role === 'ADMIN',
 }));
 
 export default useAuthStore;
