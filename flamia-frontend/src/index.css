@@ -1,11 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ──────────────────────────────────────────────
-   Base & Reset
+   Base & Reset — Flamia Design System
    ────────────────────────────────────────────── */
 
 @layer base {
@@ -22,27 +22,26 @@
   }
 
   body {
-    @apply bg-charcoal-900 text-white font-sans;
+    @apply bg-cream text-charcoal-800 font-sans;
     line-height: 1.6;
     overflow-x: hidden;
   }
 
   /* ── Typography ──────────────────────────── */
 
-  h1, h2, h3, h4, h5, h6 {
-    @apply font-serif font-medium;
+  h1, h2, h3 {
+    @apply font-serif;
     line-height: 1.2;
   }
 
-  h1 { @apply text-5xl md:text-7xl; }
-  h2 { @apply text-3xl md:text-5xl; }
-  h3 { @apply text-2xl md:text-3xl; }
-  h4 { @apply text-xl md:text-2xl; }
+  h4, h5, h6 {
+    @apply font-sans font-semibold;
+  }
 
   a {
-    @apply transition-colors duration-300;
     text-decoration: none;
     color: inherit;
+    @apply transition-colors duration-300;
   }
 
   img {
@@ -50,22 +49,33 @@
     display: block;
   }
 
-  /* ── Scrollbar ───────────────────────────── */
+  /* ── Focus Indicators (A11y) ──────────────── */
+  :focus-visible {
+    outline: 2px solid #C8944A;
+    outline-offset: 3px;
+  }
 
+  /* ── Scrollbar ───────────────────────────── */
   ::-webkit-scrollbar {
     width: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    @apply bg-charcoal-900;
+    @apply bg-cream;
   }
 
   ::-webkit-scrollbar-thumb {
-    @apply bg-charcoal-600 rounded-full;
+    @apply bg-taupe rounded-full;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-charcoal-500;
+    @apply bg-bronze;
+  }
+
+  /* Selection */
+  ::selection {
+    background: rgba(200, 148, 74, 0.2);
+    color: #1A1A1A;
   }
 }
 
@@ -74,60 +84,143 @@
    ────────────────────────────────────────────── */
 
 @layer components {
-  /* Glass Card */
-  .glass-card {
-    @apply bg-white/5 backdrop-blur-md border border-white/10 rounded-2xl;
+
+  /* ── Buttons (Per Design Doc §6.1) ─────── */
+
+  .btn-primary {
+    @apply bg-flame-500 text-ivory font-sans font-medium uppercase
+           px-8 py-3.5 rounded-luxury tracking-widest text-body-sm
+           hover:bg-flame-400 active:scale-[0.98]
+           transition-all duration-200 ease-quick
+           disabled:bg-charcoal-200 disabled:cursor-not-allowed;
   }
 
-  /* Flame Button (Primary CTA) */
-  .btn-flame {
-    @apply bg-gradient-to-r from-flame-600 to-flame-500
-           text-white font-sans font-semibold
-           px-8 py-3 rounded-full
-           hover:from-flame-500 hover:to-flame-400
-           transition-all duration-300
-           shadow-lg shadow-flame-500/20
-           hover:shadow-xl hover:shadow-flame-500/30
-           active:scale-[0.98];
+  .btn-secondary {
+    @apply bg-transparent text-charcoal-800 font-sans font-medium uppercase
+           px-8 py-3.5 rounded-luxury tracking-widest text-body-sm
+           border border-charcoal-800
+           hover:border-flame-500 hover:bg-charcoal-800/5
+           active:scale-[0.98]
+           transition-all duration-200 ease-quick;
   }
 
-  /* Ghost Button */
   .btn-ghost {
-    @apply border border-white/20 text-white
-           font-sans font-medium
-           px-8 py-3 rounded-full
-           hover:bg-white/10 hover:border-white/40
-           transition-all duration-300
-           active:scale-[0.98];
+    @apply bg-transparent text-flame-500 font-sans
+           px-0 py-1 border-none
+           hover:underline hover:underline-offset-4 hover:decoration-flame-500
+           transition-all duration-200;
   }
 
-  /* Section Container */
-  .section-container {
-    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  .btn-icon {
+    @apply w-11 h-11 flex items-center justify-center
+           bg-transparent border-none rounded-full
+           hover:bg-flame-500/10
+           transition-all duration-200;
   }
 
-  /* Flame Divider */
-  .flame-divider {
-    @apply w-16 h-[2px] bg-gradient-to-r from-flame-500 to-flame-300;
+  /* ── Cards (Per Design Doc §6.2) ───────── */
+
+  .card-product {
+    @apply bg-ivory border border-taupe/20 rounded-luxury overflow-hidden
+           transition-all duration-300 ease-luxury
+           hover:-translate-y-1 hover:shadow-luxury;
   }
 
-  /* Input Field */
+  .card-info {
+    @apply bg-cream rounded-luxury p-8;
+  }
+
+  .card-admin {
+    @apply bg-white border border-charcoal-100 rounded-lg shadow-sm p-6;
+  }
+
+  /* ── Inputs (Per Design Doc §6.3) ──────── */
+
   .input-field {
-    @apply bg-charcoal-800 border border-charcoal-600
-           text-white placeholder-charcoal-400
-           px-4 py-3 rounded-xl
-           focus:outline-none focus:border-flame-500 focus:ring-1 focus:ring-flame-500
-           transition-all duration-300;
+    @apply bg-ivory border border-taupe/40 rounded-luxury
+           px-4 py-3.5 font-sans text-body-md text-charcoal-800
+           placeholder:text-taupe
+           focus:outline-none focus:border-flame-500 focus:shadow-gold
+           transition-all duration-200;
+  }
+
+  .input-label {
+    @apply font-sans font-medium text-caption text-taupe uppercase tracking-widest
+           mb-2 block;
+  }
+
+  .input-error {
+    @apply border-error focus:border-error focus:shadow-none;
+  }
+
+  /* ── Status Badges (Per Design Doc §6.4) ── */
+
+  .badge {
+    @apply inline-flex items-center px-3.5 py-1.5 rounded-full
+           font-sans font-medium text-caption uppercase tracking-wider;
+  }
+
+  .badge-placed     { @apply bg-info/10 text-info; }
+  .badge-confirmed  { @apply bg-flame-500/10 text-flame-500; }
+  .badge-shipped    { @apply bg-info/15 text-[#4A6B7C]; }
+  .badge-delivered  { @apply bg-success/10 text-success; }
+  .badge-cancelled  { @apply bg-error/10 text-error; }
+
+  /* ── Layout ────────────────────────────── */
+
+  .section-container {
+    @apply max-w-content mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .section-wide {
+    @apply max-w-wide mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  .section-narrow {
+    @apply max-w-narrow mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* ── Dividers ──────────────────────────── */
+
+  .divider-gold {
+    @apply h-px bg-gradient-to-r from-transparent via-flame-500 to-transparent;
+  }
+
+  /* ── Overline Text ─────────────────────── */
+
+  .overline {
+    @apply font-sans text-overline uppercase tracking-[0.15em] text-flame-500;
+  }
+
+  /* ── Glass Effect ──────────────────────── */
+
+  .glass {
+    @apply bg-cream/90 backdrop-blur-xl;
   }
 }
 
 /* ──────────────────────────────────────────────
-   Animations
+   Utilities
    ────────────────────────────────────────────── */
 
 @layer utilities {
+  /* Animation delays for stagger effects */
+  .animate-delay-100 { animation-delay: 100ms; }
   .animate-delay-200 { animation-delay: 200ms; }
+  .animate-delay-300 { animation-delay: 300ms; }
   .animate-delay-400 { animation-delay: 400ms; }
-  .animate-delay-600 { animation-delay: 600ms; }
-  .animate-delay-800 { animation-delay: 800ms; }
+  .animate-delay-500 { animation-delay: 500ms; }
+}
+
+/* ──────────────────────────────────────────────
+   Reduced Motion
+   ────────────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

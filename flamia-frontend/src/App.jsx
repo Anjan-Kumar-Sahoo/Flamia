@@ -1,63 +1,72 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { useEffect } from 'react';
-import useAuthStore from './store/authStore';
-
-// Layouts
 import MainLayout from './layouts/MainLayout';
+import AuthGuard from './guards/AuthGuard';
+import useAuthStore from './store/authStore';
 
 // Pages
 import LandingPage from './pages/LandingPage';
-import NotFound from './pages/NotFound';
-
-import './index.css';
+import ShopPage from './pages/ShopPage';
+import ProductDetailPage from './pages/ProductDetailPage';
+import CartPage from './pages/CartPage';
+import LoginPage from './pages/LoginPage';
+import OrdersPage from './pages/OrdersPage';
+import AccountPage from './pages/AccountPage';
+import NotFoundPage from './pages/NotFound';
 
 function App() {
-  const init = useAuthStore((s) => s.init);
+  const initialize = useAuthStore((s) => s.initialize);
 
+  // Initialize auth on app load
   useEffect(() => {
-    const unsubscribe = init();
-    return () => unsubscribe?.();
-  }, [init]);
+    initialize();
+  }, [initialize]);
 
   return (
-    <BrowserRouter>
+    <Router>
+      {/* Toast Notifications — Per Design Doc §6.3 pattern 7 */}
       <Toaster
         position="top-center"
         toastOptions={{
-          duration: 3000,
+          duration: 4000,
           style: {
-            background: '#1E1E28',
-            color: '#fff',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: '12px',
+            background: '#1A1A1A',
+            color: '#FEFCF8',
+            fontFamily: 'Inter, sans-serif',
+            fontSize: '14px',
+            borderRadius: '2px',
+            padding: '14px 20px',
           },
           success: {
-            iconTheme: { primary: '#FF8F0A', secondary: '#1E1E28' },
+            iconTheme: { primary: '#C8944A', secondary: '#FEFCF8' },
           },
           error: {
-            iconTheme: { primary: '#ef4444', secondary: '#1E1E28' },
+            iconTheme: { primary: '#A35D5D', secondary: '#FEFCF8' },
           },
         }}
       />
 
       <Routes>
+        {/* Public routes with main layout */}
         <Route element={<MainLayout />}>
           <Route path="/" element={<LandingPage />} />
-          {/* Upcoming routes:
-          <Route path="/shop" element={<ShopPage />} />
-          <Route path="/product/:slug" element={<ProductPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/account" element={<AccountPage />} />
+          <Route path="/products" element={<ShopPage />} />
+          <Route path="/products/:slug" element={<ProductDetailPage />} />
           <Route path="/cart" element={<CartPage />} />
-          <Route path="/checkout" element={<CheckoutPage />} />
-          <Route path="/orders" element={<OrdersPage />} />
-          <Route path="/orders/:orderId" element={<OrderDetailPage />} />
-          <Route path="/admin/*" element={<AdminLayout />} /> */}
+
+          {/* Authenticated customer routes */}
+          <Route path="/orders" element={<AuthGuard><OrdersPage /></AuthGuard>} />
+          <Route path="/account" element={<AuthGuard><AccountPage /></AuthGuard>} />
+
+          {/* Catch-all */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
-        <Route path="*" element={<NotFound />} />
+
+        {/* Login (no main layout — uses split layout) */}
+        <Route path="/login" element={<LoginPage />} />
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
 }
 
